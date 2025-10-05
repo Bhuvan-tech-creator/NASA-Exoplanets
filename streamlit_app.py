@@ -375,79 +375,282 @@ Training Enabled: {'Yes' if ALLOW_TRAINING else 'No'}
 
 
 def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProcessor):
-    st.header("Classify an Exoplanet Candidate")
+    st.title("🔍 Classify Exoplanet Candidate")
+    st.markdown("Input stellar and planetary parameters to get real-time classification predictions using our trained ensemble model.")
+    
+    # Check if models are loaded
     if not getattr(ensemble, 'is_trained', False):
-        st.warning("Models are not loaded. Train the model first or upload pre-trained artifacts.")
+        st.error("❌ Models are not loaded. Please train the model first.")
+        st.info("💡 Go to the Hyperparameters page to train the models.")
+        return
+    
+    if processor is None or not hasattr(processor, 'scaler') or processor.scaler is None:
+        st.error("❌ Data processor/scaler not available. Please train the models first.")
+        return
 
     with st.form("classify_form"):
-        cols = st.columns(2)
-        with cols[0]:
-            orbital_period = st.number_input("Orbital period (days)", min_value=0.01, max_value=10000.0, value=365.25, step=0.01)
-            transit_duration = st.number_input("Transit duration (hours)", min_value=0.01, max_value=1000.0, value=10.0, step=0.01)
-            transit_depth = st.number_input("Transit depth (ppm)", min_value=0.0, max_value=1e6, value=1000.0, step=1.0)
-            planet_radius = st.number_input("Planet radius (Earth radii)", min_value=0.01, max_value=50.0, value=1.0, step=0.01)
-            equilibrium_temp = st.number_input("Equilibrium temp (K)", min_value=0.0, max_value=5000.0, value=300.0, step=1.0)
-            insolation_flux = st.number_input("Insolation flux (relative)", min_value=0.0, max_value=1e6, value=1.0, step=0.01)
-        with cols[1]:
-            stellar_temp = st.number_input("Stellar temp (K)", min_value=1000.0, max_value=10000.0, value=5778.0, step=1.0)
-            stellar_logg = st.number_input("Stellar log g", min_value=0.0, max_value=10.0, value=4.44, step=0.01)
-            stellar_radius = st.number_input("Stellar radius (Solar radii)", min_value=0.01, max_value=100.0, value=1.0, step=0.01)
-            stellar_magnitude = st.number_input("Stellar magnitude", min_value=-10.0, max_value=30.0, value=12.0, step=0.01)
+        st.markdown("### 🪐 Planetary Parameters")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            orbital_period = st.number_input(
+                "Orbital Period (days)", 
+                min_value=0.01, max_value=10000.0, value=365.25, step=0.01,
+                help="Time for one complete orbit around the star"
+            )
+            transit_duration = st.number_input(
+                "Transit Duration (hours)", 
+                min_value=0.01, max_value=1000.0, value=10.0, step=0.01,
+                help="How long the planet takes to cross the star"
+            )
+            transit_depth = st.number_input(
+                "Transit Depth (ppm)", 
+                min_value=0.0, max_value=1e6, value=1000.0, step=1.0,
+                help="How much the star dims during transit (parts per million)"
+            )
+            planet_radius = st.number_input(
+                "Planet Radius (Earth radii)", 
+                min_value=0.01, max_value=50.0, value=1.0, step=0.01,
+                help="Planet size relative to Earth"
+            )
+            equilibrium_temp = st.number_input(
+                "Equilibrium Temperature (K)", 
+                min_value=0.0, max_value=5000.0, value=300.0, step=1.0,
+                help="Expected planet temperature"
+            )
+            insolation_flux = st.number_input(
+                "Insolation Flux (relative to Earth)", 
+                min_value=0.0, max_value=1e6, value=1.0, step=0.01,
+                help="Amount of stellar radiation received"
+            )
+        
+        with col2:
+            st.markdown("### ⭐ Stellar Parameters")
+            impact_param = st.number_input(
+                "Impact Parameter", 
+                min_value=0.0, max_value=2.0, value=0.5, step=0.01,
+                help="How centrally the planet crosses the star"
+            )
+            model_snr = st.number_input(
+                "Model SNR", 
+                min_value=0.0, max_value=1000.0, value=20.0, step=0.1,
+                help="Signal-to-noise ratio of the detection"
+            )
+            stellar_temp = st.number_input(
+                "Stellar Temperature (K)", 
+                min_value=1000.0, max_value=10000.0, value=5778.0, step=1.0,
+                help="Surface temperature of the host star"
+            )
+            stellar_logg = st.number_input(
+                "Stellar log g", 
+                min_value=0.0, max_value=10.0, value=4.44, step=0.01,
+                help="Surface gravity of the star"
+            )
+            stellar_radius = st.number_input(
+                "Stellar Radius (Solar radii)", 
+                min_value=0.01, max_value=100.0, value=1.0, step=0.01,
+                help="Size of the host star relative to the Sun"
+            )
+            stellar_magnitude = st.number_input(
+                "Stellar Magnitude", 
+                min_value=-10.0, max_value=30.0, value=12.0, step=0.01,
+                help="Brightness of the star"
+            )
 
-        submitted = st.form_submit_button("Predict")
+        submitted = st.form_submit_button("🚀 Classify Candidate", type="primary", use_container_width=True)
 
     if submitted:
         try:
-            features = np.array([[
-                orbital_period, 0, transit_duration, transit_depth,
-                planet_radius, equilibrium_temp, insolation_flux, 0,
-                stellar_temp, stellar_logg, stellar_radius, stellar_magnitude,
-                0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0
-            ]])
+            with st.spinner("🔄 Running ensemble model prediction..."):
+                # Construct feature array in the correct format based on training data
+                # This matches the feature order from data preprocessing
+                features = np.array([[
+                    orbital_period,           # koi_period
+                    impact_param,             # koi_impact  
+                    transit_duration,         # koi_duration
+                    transit_depth,           # koi_depth
+                    planet_radius,           # koi_prad
+                    equilibrium_temp,        # koi_teq
+                    insolation_flux,         # koi_insol
+                    model_snr,               # koi_model_snr
+                    stellar_temp,            # koi_steff
+                    stellar_logg,            # koi_slogg
+                    stellar_radius,          # koi_srad
+                    stellar_magnitude,       # koi_kepmag
+                    0, 0, 0, 0,             # koi_fpflag_nt, _ss, _co, _ec
+                    0, 0, 0, 0,             # period errors
+                    0, 0, 0, 0              # other error terms
+                ]])
 
-            if processor is None or not hasattr(processor, 'scaler'):
-                st.error("Data processor/scaler not available. Train or provide a scaler.")
-                return
-            features_scaled = processor.scaler.transform(features)
+                # Scale features using the trained scaler
+                features_scaled = processor.scaler.transform(features)
 
-            # Synthetic light curve for CNN
-            light_curve = processor.create_light_curve_features(
-                pd.DataFrame([{ 'koi_period': orbital_period, 'koi_duration': transit_duration, 'koi_depth': transit_depth }])
-            )[0]
+                # Create light curve for CNN
+                light_curve_data = pd.DataFrame([{
+                    'koi_period': orbital_period, 
+                    'koi_duration': transit_duration, 
+                    'koi_depth': transit_depth
+                }])
+                light_curve = processor.create_light_curve_features(light_curve_data)[0]
 
-            confidence = ensemble.predict(features_scaled, light_curve.reshape(1, -1))[0]
+                # Get ensemble prediction
+                prediction_proba = ensemble.predict(features_scaled, light_curve.reshape(1, -1))[0]
+                
+                # Convert to percentage
+                confidence_pct = prediction_proba * 100
+                
+                # Determine classification based on model confidence
+                if prediction_proba >= 0.7:
+                    classification = "Confirmed Exoplanet"
+                    status = 'success'
+                    result_color = '#28a745'
+                elif prediction_proba >= 0.3:
+                    classification = "Candidate Exoplanet"
+                    status = 'warning'
+                    result_color = '#ffc107'
+                else:
+                    classification = "False Positive"
+                    status = 'danger'
+                    result_color = '#dc3545'
 
-            is_earth_like = (
-                abs(orbital_period - 365.25) < 10 and
-                abs(planet_radius - 1.0) < 0.1 and
-                abs(stellar_temp - 5778) < 100
-            )
-            if is_earth_like:
-                classification = "Confirmed Exoplanet"
-                confidence_pct = 95.0
-            elif confidence > 0.7:
-                classification = "Confirmed Exoplanet"
-                confidence_pct = float(confidence * 100)
-            elif confidence > 0.4:
-                classification = "Potential False Positive"
-                confidence_pct = float(confidence * 100)
-            else:
-                classification = "Not an Exoplanet"
-                confidence_pct = float((1 - confidence) * 100)
+                # Display results
+                st.markdown("## 🎯 Classification Results")
+                
+                # Main result card
+                result_col1, result_col2 = st.columns([2, 1])
+                
+                with result_col1:
+                    st.markdown(f"""
+                    <div style="
+                        background: linear-gradient(135deg, {result_color}22 0%, {result_color}11 100%);
+                        border: 2px solid {result_color};
+                        border-radius: 10px;
+                        padding: 1.5rem;
+                        text-align: center;
+                        margin: 1rem 0;
+                    ">
+                        <h2 style="color: {result_color}; margin: 0;">{classification}</h2>
+                        <h3 style="color: {result_color}; margin: 0.5rem 0;">Confidence: {confidence_pct:.1f}%</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with result_col2:
+                    # Confidence gauge
+                    fig_gauge = go.Figure(go.Indicator(
+                        mode = "gauge+number",
+                        value = confidence_pct,
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        title = {'text': "Confidence"},
+                        gauge = {
+                            'axis': {'range': [None, 100]},
+                            'bar': {'color': result_color},
+                            'steps': [
+                                {'range': [0, 30], 'color': "lightgray"},
+                                {'range': [30, 70], 'color': "yellow"},
+                                {'range': [70, 100], 'color': "lightgreen"}],
+                            'threshold': {
+                                'line': {'color': "red", 'width': 4},
+                                'thickness': 0.75,
+                                'value': 90}}))
+                    fig_gauge.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20))
+                    st.plotly_chart(fig_gauge, use_container_width=True)
 
-            # Styled result card similar to Flask UI
-            status = 'success' if 'Confirmed' in classification else ('warning' if 'Potential' in classification else 'danger')
-            body_html = f"""
-                <p class='card-text'><strong>Prediction:</strong> {classification}</p>
-                <p class='card-text'><strong>Confidence:</strong> {confidence_pct:.2f}%</p>
-            """
-            st.markdown(_card_html("Classification Result", body_html, status=status), unsafe_allow_html=True)
+                # Individual model predictions (if available)
+                st.markdown("### 🔍 Individual Model Predictions")
+                
+                try:
+                    # Get individual model predictions
+                    rf_proba = ensemble.rf_model.predict_proba(features_scaled)[0, 1] * 100
+                    xgb_proba = ensemble.xgb_model.predict_proba(features_scaled)[0, 1] * 100
+                    lgb_proba = ensemble.lgb_model.predict_proba(features_scaled)[0, 1] * 100
+                    
+                    # CNN prediction
+                    lc_reshaped = light_curve.reshape(1, light_curve.shape[0], 1)
+                    cnn_proba = ensemble.cnn_model.predict(lc_reshaped)[0, 0] * 100
+                    
+                    model_col1, model_col2, model_col3, model_col4 = st.columns(4)
+                    
+                    with model_col1:
+                        st.metric("🌲 Random Forest", f"{rf_proba:.1f}%")
+                    with model_col2:
+                        st.metric("🚀 XGBoost", f"{xgb_proba:.1f}%")
+                    with model_col3:
+                        st.metric("⚡ LightGBM", f"{lgb_proba:.1f}%")
+                    with model_col4:
+                        st.metric("🧠 CNN", f"{cnn_proba:.1f}%")
+                        
+                    # Model comparison chart
+                    model_names = ['Random Forest', 'XGBoost', 'LightGBM', 'CNN', 'Ensemble']
+                    model_scores = [rf_proba, xgb_proba, lgb_proba, cnn_proba, confidence_pct]
+                    
+                    fig_comparison = go.Figure(data=[
+                        go.Bar(x=model_names, y=model_scores,
+                               marker_color=['#28a745', '#ffc107', '#17a2b8', '#dc3545', '#6f42c1'],
+                               text=[f'{score:.1f}%' for score in model_scores],
+                               textposition='auto')
+                    ])
+                    fig_comparison.update_layout(
+                        title='Individual Model Predictions',
+                        yaxis_title='Confidence (%)',
+                        showlegend=False,
+                        height=400
+                    )
+                    st.plotly_chart(fig_comparison, use_container_width=True)
+                    
+                except Exception as e:
+                    st.warning(f"Could not get individual model predictions: {e}")
 
-            with st.expander("Light curve"):
-                st.line_chart(light_curve)
+                # Light curve visualization
+                st.markdown("### 📈 Simulated Light Curve")
+                
+                # Create time axis
+                time_axis = np.linspace(0, orbital_period * 2, len(light_curve))
+                
+                fig_lc = go.Figure()
+                fig_lc.add_trace(go.Scatter(
+                    x=time_axis,
+                    y=light_curve,
+                    mode='lines',
+                    line=dict(color='#74c0fc', width=2),
+                    name='Light Curve'
+                ))
+                
+                fig_lc.update_layout(
+                    title='Generated Light Curve for CNN Analysis',
+                    xaxis_title='Time (days)',
+                    yaxis_title='Relative Flux',
+                    height=400
+                )
+                st.plotly_chart(fig_lc, use_container_width=True)
+                
+                # System summary
+                st.markdown("### 📊 System Summary")
+                
+                summary_col1, summary_col2, summary_col3 = st.columns(3)
+                
+                with summary_col1:
+                    st.markdown("**Orbital Characteristics:**")
+                    st.write(f"Period: {orbital_period:.2f} days")
+                    st.write(f"Transit Duration: {transit_duration:.2f} hours")
+                    st.write(f"Transit Depth: {transit_depth:.0f} ppm")
+                
+                with summary_col2:
+                    st.markdown("**Planet Properties:**")
+                    st.write(f"Radius: {planet_radius:.2f} R⊕")
+                    st.write(f"Temperature: {equilibrium_temp:.0f} K")
+                    st.write(f"Insolation: {insolation_flux:.2f} × Earth")
+                
+                with summary_col3:
+                    st.markdown("**Host Star:**")
+                    st.write(f"Temperature: {stellar_temp:.0f} K")
+                    st.write(f"Radius: {stellar_radius:.2f} R☉")
+                    st.write(f"Magnitude: {stellar_magnitude:.1f}")
+
         except Exception as e:
-            st.error(f"Prediction failed: {e}")
+            st.error(f"❌ Prediction failed: {str(e)}")
+            st.info("💡 Please ensure the models are properly trained and try again.")
+            if st.checkbox("Show error details"):
+                st.exception(e)
 
 
 def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProcessor):
