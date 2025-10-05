@@ -14,3 +14,4 @@ joblib
 imbalanced-learn
 optuna
 gunicorn
+streamlit
