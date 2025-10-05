@@ -27,6 +27,20 @@ class ExoplanetEnsembleModel:
         self.feature_columns = None
         self.meta_model = None
         self.meta_feature_order = None
+        self._progress_cb = None  # optional progress callback (stage:str, pct:int, msg:str)
+
+    def set_progress_callback(self, cb):
+        """Register a callback to receive progress updates.
+        cb signature: (stage: str, pct: int, msg: str) -> None
+        """
+        self._progress_cb = cb
+
+    def _cb(self, stage: str, pct: int, msg: str):
+        try:
+            if self._progress_cb is not None:
+                self._progress_cb(stage, int(pct), str(msg))
+        except Exception:
+            pass
         
     def create_cnn_model(self, input_shape):
         """Create CNN model for light curve analysis"""
@@ -68,6 +82,7 @@ class ExoplanetEnsembleModel:
     def train_random_forest(self, X_train, y_train, X_test, y_test):
         """Train Random Forest model"""
         print("Training Random Forest...")
+        self._cb('rf', 15, 'Training Random Forest...')
         
         self.rf_model = RandomForestClassifier(
             n_estimators=200,
@@ -89,12 +104,14 @@ class ExoplanetEnsembleModel:
         rf_auc = roc_auc_score(y_test, rf_proba)
         
         print(f"Random Forest - Accuracy: {rf_accuracy:.4f}, AUC: {rf_auc:.4f}")
+        self._cb('rf', 25, f"Random Forest done. Acc={rf_accuracy:.4f}, AUC={rf_auc:.4f}")
         
         return rf_proba, rf_accuracy, rf_auc
     
     def train_xgboost(self, X_train, y_train, X_test, y_test):
         """Train XGBoost model"""
         print("Training XGBoost...")
+        self._cb('xgb', 35, 'Training XGBoost...')
         
         self.xgb_model = xgb.XGBClassifier(
             n_estimators=300,
@@ -116,12 +133,14 @@ class ExoplanetEnsembleModel:
         xgb_auc = roc_auc_score(y_test, xgb_proba)
         
         print(f"XGBoost - Accuracy: {xgb_accuracy:.4f}, AUC: {xgb_auc:.4f}")
+        self._cb('xgb', 45, f"XGBoost done. Acc={xgb_accuracy:.4f}, AUC={xgb_auc:.4f}")
         
         return xgb_proba, xgb_accuracy, xgb_auc
     
     def train_lightgbm(self, X_train, y_train, X_test, y_test):
         """Train LightGBM model"""
         print("Training LightGBM...")
+        self._cb('lgb', 55, 'Training LightGBM...')
         
         self.lgb_model = lgb.LGBMClassifier(
             n_estimators=300,
@@ -143,12 +162,14 @@ class ExoplanetEnsembleModel:
         lgb_auc = roc_auc_score(y_test, lgb_proba)
         
         print(f"LightGBM - Accuracy: {lgb_accuracy:.4f}, AUC: {lgb_auc:.4f}")
+        self._cb('lgb', 65, f"LightGBM done. Acc={lgb_accuracy:.4f}, AUC={lgb_auc:.4f}")
         
         return lgb_proba, lgb_accuracy, lgb_auc
     
     def train_cnn(self, lc_train, y_train, lc_test, y_test):
         """Train CNN model on light curves"""
         print("Training CNN on light curves...")
+        self._cb('cnn', 70, 'Training CNN on light curves...')
         
         # Reshape light curves for CNN
         lc_train_reshaped = lc_train.reshape(lc_train.shape[0], lc_train.shape[1], 1)
@@ -188,12 +209,14 @@ class ExoplanetEnsembleModel:
         cnn_auc = roc_auc_score(y_test, cnn_proba)
         
         print(f"CNN - Accuracy: {cnn_accuracy:.4f}, AUC: {cnn_auc:.4f}")
+        self._cb('cnn', 80, f"CNN done. Acc={cnn_accuracy:.4f}, AUC={cnn_auc:.4f}")
         
         return cnn_proba, cnn_accuracy, cnn_auc
     
     def optimize_ensemble_weights(self, predictions, y_test):
         """Optimize ensemble weights and decision threshold to maximize accuracy."""
         print("Optimizing ensemble weights...")
+        self._cb('opt', 85, 'Optimizing ensemble weights...')
 
         # Align lengths
         min_length = min(len(pred) for pred in predictions)
@@ -239,12 +262,14 @@ class ExoplanetEnsembleModel:
         print(f"Best ensemble weights: {best_weights}")
         print(f"Best ensemble threshold: {best_thr:.2f}")
         print(f"Best ensemble accuracy: {best_acc:.4f}")
+        self._cb('opt', 90, f"Weights {best_weights}, thr={best_thr:.2f}, acc={best_acc:.4f}")
 
         return best_weights, best_thr
     
     def train_ensemble(self, data_dict):
         """Train the complete ensemble model"""
         print("Starting ensemble training...")
+        self._cb('start', 5, 'Starting ensemble training...')
         
         X_train = data_dict['X_train']
         X_test = data_dict['X_test']
@@ -284,6 +309,7 @@ class ExoplanetEnsembleModel:
         print(f"\n=== FINAL ENSEMBLE RESULTS ===")
         print(f"Ensemble Accuracy: {ensemble_accuracy:.4f}")
         print(f"Ensemble AUC: {ensemble_auc:.4f}")
+        self._cb('final', 95, f"Ensemble Acc={ensemble_accuracy:.4f}, AUC={ensemble_auc:.4f}")
         
         # Individual model results
         print(f"\n=== INDIVIDUAL MODEL RESULTS ===")
@@ -293,6 +319,7 @@ class ExoplanetEnsembleModel:
         print(f"CNN - Accuracy: {cnn_acc:.4f}, AUC: {cnn_auc:.4f}")
         
         self.is_trained = True
+        self._cb('done', 100, 'Training complete')
         
         return {
             'ensemble_accuracy': ensemble_accuracy,
@@ -351,6 +378,7 @@ class ExoplanetEnsembleModel:
     def train_ensemble_quick(self, data_dict):
         """Quick training version with reduced parameters for faster execution"""
         print("Starting quick ensemble training...")
+        self._cb('start', 5, 'Starting quick ensemble training...')
         
         X_train = data_dict['X_train']
         X_test = data_dict['X_test']
@@ -363,6 +391,7 @@ class ExoplanetEnsembleModel:
         
         # Train models with reduced parameters for speed
         print("Quick training Random Forest...")
+        self._cb('rf', 15, 'Quick training Random Forest...')
         self.rf_model = RandomForestClassifier(
             n_estimators=100,  # Reduced from 200
             max_depth=15,      # Reduced from 20
@@ -378,6 +407,7 @@ class ExoplanetEnsembleModel:
         rf_auc = roc_auc_score(y_test, rf_proba)
         
         print("Quick training XGBoost...")
+        self._cb('xgb', 30, 'Quick training XGBoost...')
         self.xgb_model = xgb.XGBClassifier(
             n_estimators=150,  # Reduced from 300
             max_depth=6,       # Reduced from 8
@@ -393,6 +423,7 @@ class ExoplanetEnsembleModel:
         xgb_auc = roc_auc_score(y_test, xgb_proba)
         
         print("Quick training LightGBM...")
+        self._cb('lgb', 45, 'Quick training LightGBM...')
         self.lgb_model = lgb.LGBMClassifier(
             n_estimators=150,  # Reduced from 300
             max_depth=6,       # Reduced from 8
@@ -408,6 +439,7 @@ class ExoplanetEnsembleModel:
         lgb_auc = roc_auc_score(y_test, lgb_proba)
         
         print("Quick training CNN...")
+        self._cb('cnn', 60, 'Quick training CNN...')
         # Simplified CNN architecture for faster training
         lc_train_reshaped = lc_train.reshape(lc_train.shape[0], lc_train.shape[1], 1)
         lc_test_reshaped = lc_test.reshape(lc_test.shape[0], lc_test.shape[1], 1)
@@ -453,6 +485,7 @@ class ExoplanetEnsembleModel:
         cnn_auc = roc_auc_score(y_test, cnn_proba)
         
         print("Optimizing ensemble weights...")
+        self._cb('opt', 80, 'Optimizing ensemble weights...')
         predictions = [rf_proba, xgb_proba, lgb_proba, cnn_proba]
         self.optimize_ensemble_weights(predictions, y_test)
         
@@ -466,6 +499,8 @@ class ExoplanetEnsembleModel:
         ensemble_auc = roc_auc_score(y_test[:min_length], ensemble_proba)
         
         self.is_trained = True
+        self._cb('final', 95, f"Quick ensemble Acc={ensemble_accuracy:.4f}, AUC={ensemble_auc:.4f}")
+        self._cb('done', 100, 'Quick training complete')
         
         results = {
             'ensemble_accuracy': ensemble_accuracy,

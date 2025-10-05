@@ -166,9 +166,24 @@ def train_and_save(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataPro
         except Exception:
             pass
 
+    # Progress hook
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    def _progress_cb(stage: str, pct: int, msg: str):
+        try:
+            progress_bar.progress(max(0, min(100, int(pct))))
+        except Exception:
+            pass
+        status_text.text(f"{msg}")
+        ui_log(f"{stage.upper()}: {msg}")
+
+    try:
+        ensemble.set_progress_callback(_progress_cb)
+    except Exception:
+        pass
+
     if quick_mode:
         with st.spinner("Training ensemble (optimized for speed)..."):
-            # Faster training with reduced parameters
             ui_log("Training with quick mode parameters...")
             results = ensemble.train_ensemble_quick(data)
     else:
@@ -191,6 +206,8 @@ def train_and_save(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataPro
     ui_log("Metrics saved")
 
     st.success("Training complete and models saved.")
+    progress_bar.empty()
+    status_text.empty()
     logger.info("Training completed")
     return results
 
@@ -1059,6 +1076,18 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     import os
                     os.environ['QUICK_TRAIN'] = '1'  # Signal for reduced training time
                     
+                    # Hook progress into the custom training run
+                    def _cb(stage, pct, msg):
+                        try:
+                            progress_bar.progress(max(0, min(100, int(pct))))
+                        except Exception:
+                            pass
+                        status_text.text(msg)
+                        ui_log(f"{stage.upper()}: {msg}")
+                    try:
+                        new_ensemble.set_progress_callback(_cb)
+                    except Exception:
+                        pass
                     # Prefer quick training path if available
                     try:
                         results = new_ensemble.train_ensemble_quick(data)
@@ -1742,7 +1771,7 @@ def page_statistics(metrics):
                     # Set quick training mode
                     os.environ['QUICK_TRAIN'] = '1'
                     
-                    # Actually retrain the models
+                    # Actually retrain the models (this will show progress via callback)
                     results = train_and_save(ensemble, processor)
                     logger.info("Statistics: Training completed and saved")
                     ui_log("Statistics retrain completed")
