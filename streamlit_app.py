@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 import time
+import logging
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,10 @@ import plotly.express as px
 
 from data_preprocessing import ExoplanetDataProcessor
 from ensemble_model import ExoplanetEnsembleModel
+
+# Basic console logging so terminal reflects user interactions
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 
 # Environment-driven paths (compatible with Streamlit Cloud)
@@ -469,6 +474,7 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
         submitted = st.form_submit_button("🚀 Classify Candidate", type="primary", use_container_width=True)
 
     if submitted:
+        logger.info("Classify form submitted")
         try:
             with st.spinner("🔄 Running ensemble model prediction..."):
                 # Construct feature array in the correct format based on training data
@@ -492,6 +498,11 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
                 ]])
 
                 # Scale features using the trained scaler
+                logger.info(
+                    "Predict: period=%.3f, duration=%.3f, depth=%.1f, prad=%.2f, teq=%.1f, insol=%.2f, steff=%.1f, slogg=%.2f, srad=%.2f, mag=%.2f",
+                    orbital_period, transit_duration, transit_depth, planet_radius, equilibrium_temp, insolation_flux,
+                    stellar_temp, stellar_logg, stellar_radius, stellar_magnitude
+                )
                 features_scaled = processor.scaler.transform(features)
 
                 # Create light curve for CNN
@@ -504,6 +515,7 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
 
                 # Get ensemble prediction
                 prediction_proba = ensemble.predict(features_scaled, light_curve.reshape(1, -1))[0]
+                logger.info("Prediction complete with confidence=%.4f", float(prediction_proba))
                 
                 # Convert to percentage
                 confidence_pct = prediction_proba * 100
@@ -656,6 +668,7 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
                     st.write(f"Magnitude: {stellar_magnitude:.1f}")
 
         except Exception as e:
+            logger.exception("Prediction failed: %s", e)
             st.error(f"❌ Prediction failed: {str(e)}")
             st.info("💡 Please ensure the models are properly trained and try again.")
             if st.checkbox("Show error details"):
@@ -857,6 +870,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
     
     with action_col1:
         if st.button("💾 Save Parameters", type="secondary", use_container_width=True):
+            logger.info("Hyperparameters: Save clicked")
             # Update session state
             st.session_state.hyperparameters = {
                 'rf': {
@@ -894,6 +908,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
     
     with action_col2:
         if st.button("🔄 Reset to Defaults", type="secondary", use_container_width=True):
+            logger.info("Hyperparameters: Reset to defaults clicked")
             st.session_state.hyperparameters = {
                 'rf': {'n_estimators': 200, 'max_depth': 20, 'min_samples_split': 5, 'min_samples_leaf': 2},
                 'xgb': {'n_estimators': 300, 'max_depth': 8, 'learning_rate': 0.1, 'subsample': 0.8},
@@ -906,6 +921,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
     
     with action_col3:
         if st.button("🚀 Retrain with New Parameters", type="primary", use_container_width=True):
+            logger.info("Hyperparameters: Retrain clicked")
             if not ALLOW_TRAINING:
                 st.warning("⚠️ Training is disabled on this deployment. Set ALLOW_TRAINING=1 to enable.")
                 return
@@ -980,6 +996,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     os.environ['QUICK_TRAIN'] = '1'  # Signal for reduced training time
                     
                     results = new_ensemble.train_ensemble(data)
+                    logger.info("Hyperparameters: Base training run finished")
                     
                     progress_bar.progress(80)
                     status_text.text('💾 Saving trained models...')
@@ -1007,6 +1024,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     st.success("✅ Models retrained successfully with new parameters! Check the Statistics page for updated metrics.")
                     
                 except Exception as e:
+                    logger.exception("Error during retraining: %s", e)
                     st.error(f"❌ Error retraining models: {e}")
     
     # Current Parameters Display
@@ -1610,6 +1628,7 @@ def page_statistics(metrics):
     
     with train_col2:
         if st.button("🚀 Retrain Models", type="primary", use_container_width=True):
+            logger.info("Statistics: Retrain Models clicked")
             if not ALLOW_TRAINING:
                 st.warning("⚠️ Training is disabled on this deployment. Set ALLOW_TRAINING=1 to enable.")
                 return
@@ -1647,6 +1666,7 @@ def page_statistics(metrics):
                     
                     # Actually retrain the models
                     results = train_and_save(ensemble, processor)
+                    logger.info("Statistics: Training completed and saved")
                     
                     progress_bar.progress(100)
                     st.session_state['metrics'] = results
@@ -1657,6 +1677,7 @@ def page_statistics(metrics):
                     st.rerun()
                     
                 except Exception as e:
+                    logger.exception("Error retraining from Statistics page: %s", e)
                     st.error(f"❌ Error retraining models: {e}")
     
     # Recent Training Information
