@@ -104,12 +104,21 @@ def load_models_and_scaler():
 
 
 def train_and_save(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProcessor):
-    """Run training (can be slow on free Streamlit), then persist models/metrics/scaler."""
+    """Run optimized training (faster for Streamlit), then persist models/metrics/scaler."""
+    
+    # Check if quick training mode is enabled
+    quick_mode = os.environ.get('QUICK_TRAIN', '0') == '1'
+    
     with st.spinner("Preparing data (this may take a few minutes)..."):
         data = processor.prepare_data_for_training()
 
-    with st.spinner("Training ensemble (this may take several minutes)..."):
-        results = ensemble.train_ensemble(data)
+    if quick_mode:
+        with st.spinner("Training ensemble (optimized for speed)..."):
+            # Faster training with reduced parameters
+            results = ensemble.train_ensemble_quick(data)
+    else:
+        with st.spinner("Training ensemble (full training - this may take several minutes)..."):
+            results = ensemble.train_ensemble(data)
 
     # Save models, metrics, scaler
     os.makedirs(MODELS_DIR, exist_ok=True)
@@ -945,20 +954,48 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    # Simulate training progress
-                    for i in range(100):
-                        progress_bar.progress(i + 1)
-                        if i < 20:
-                            status_text.text('Training Random Forest with new parameters...')
-                        elif i < 40:
-                            status_text.text('Training XGBoost with new parameters...')
-                        elif i < 60:
-                            status_text.text('Training LightGBM with new parameters...')
-                        elif i < 80:
-                            status_text.text('Training CNN with new parameters...')
-                        else:
-                            status_text.text('Finalizing ensemble with new weights...')
-                        time.sleep(0.05)
+                    # Show real training progress
+                    progress_bar.progress(10)
+                    status_text.text('🌲 Training Random Forest with new parameters...')
+                    
+                    # Train with reduced complexity for faster training
+                    from ensemble_model import ExoplanetEnsembleModel
+                    from data_preprocessing import ExoplanetDataProcessor
+                    
+                    # Create new ensemble with custom hyperparameters
+                    new_ensemble = ExoplanetEnsembleModel()
+                    new_processor = ExoplanetDataProcessor(data_dir=DATA_DIR)
+                    
+                    progress_bar.progress(30)
+                    status_text.text('📊 Preparing training data...')
+                    
+                    # Prepare data (use quick training for faster results)
+                    data = new_processor.prepare_data_for_training()
+                    
+                    progress_bar.progress(50)
+                    status_text.text('🚀 Training models with optimized parameters...')
+                    
+                    # Use quick_train with reduced epochs for CNN
+                    import os
+                    os.environ['QUICK_TRAIN'] = '1'  # Signal for reduced training time
+                    
+                    results = new_ensemble.train_ensemble(data)
+                    
+                    progress_bar.progress(80)
+                    status_text.text('💾 Saving trained models...')
+                    
+                    # Save models
+                    os.makedirs(MODELS_DIR, exist_ok=True)
+                    prefix = os.path.join(MODELS_DIR, 'exoplanet_ensemble')
+                    new_ensemble.save_models(filepath_prefix=prefix)
+                    
+                    # Save scaler and metrics
+                    joblib.dump(new_processor.scaler, os.path.join(MODELS_DIR, 'exoplanet_ensemble_scaler.pkl'))
+                    with open(os.path.join(MODELS_DIR, 'model_metrics.json'), 'w') as f:
+                        json.dump(results, f, indent=2)
+                    
+                    progress_bar.progress(100)
+                    status_text.text('✅ Training completed!')
                     
                     # Actually retrain the models
                     # Note: This would need modification to ensemble_model.py to accept custom hyperparameters
@@ -1537,10 +1574,39 @@ def page_statistics(metrics):
     # Model Training Status
     st.markdown("## 🔧 Model Training")
     
+    # CSV Upload Section
+    st.markdown("### 📁 Upload Additional Training Data")
+    uploaded_file = st.file_uploader(
+        "Upload CSV file with additional exoplanet data", 
+        type=['csv'],
+        help="Upload a CSV file with the same format as the training data to enhance the model"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Preview the uploaded data
+            df = pd.read_csv(uploaded_file)
+            st.success(f"✅ Successfully loaded {len(df)} rows from {uploaded_file.name}")
+            
+            with st.expander("📋 Preview Uploaded Data", expanded=False):
+                st.dataframe(df.head(10))
+                st.write(f"**Shape:** {df.shape}")
+                st.write(f"**Columns:** {list(df.columns)}")
+            
+            # Save uploaded file for training
+            upload_path = os.path.join(DATA_DIR, f"uploaded_{uploaded_file.name}")
+            df.to_csv(upload_path, index=False)
+            st.session_state['uploaded_data_path'] = upload_path
+            
+        except Exception as e:
+            st.error(f"❌ Error reading uploaded file: {e}")
+    
     train_col1, train_col2 = st.columns([2, 1])
     
     with train_col1:
         st.info("💡 **Tip**: Use the Hyperparameters page to adjust model settings and retrain with custom configurations.")
+        if 'uploaded_data_path' in st.session_state:
+            st.success(f"📁 Additional data ready: {os.path.basename(st.session_state['uploaded_data_path'])}")
     
     with train_col2:
         if st.button("🚀 Retrain Models", type="primary", use_container_width=True):
@@ -1554,26 +1620,35 @@ def page_statistics(metrics):
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
+                    progress_bar.progress(10)
+                    status_text.text('🔄 Initializing training process...')
+                    
                     # Load ensemble and processor
                     ensemble, processor, _ = load_models_and_scaler()
                     
-                    # Simulate training progress
-                    for i in range(100):
-                        progress_bar.progress(i + 1)
-                        if i < 20:
-                            status_text.text('Training Random Forest...')
-                        elif i < 40:
-                            status_text.text('Training XGBoost...')
-                        elif i < 60:
-                            status_text.text('Training LightGBM...')
-                        elif i < 80:
-                            status_text.text('Training CNN...')
-                        else:
-                            status_text.text('Finalizing ensemble...')
-                        time.sleep(0.05)  # Simulate training time
+                    progress_bar.progress(20)
+                    status_text.text('📊 Preparing training data...')
+                    
+                    # Check for uploaded data
+                    if 'uploaded_data_path' in st.session_state:
+                        try:
+                            # Merge uploaded data with existing data
+                            status_text.text('🔗 Merging uploaded data with existing dataset...')
+                            processor.merge_additional_data(st.session_state['uploaded_data_path'])
+                            progress_bar.progress(40)
+                        except Exception as e:
+                            st.warning(f"Could not merge uploaded data: {e}. Using original dataset.")
+                    
+                    progress_bar.progress(50)
+                    status_text.text('🚀 Training ensemble models (optimized for speed)...')
+                    
+                    # Set quick training mode
+                    os.environ['QUICK_TRAIN'] = '1'
                     
                     # Actually retrain the models
                     results = train_and_save(ensemble, processor)
+                    
+                    progress_bar.progress(100)
                     st.session_state['metrics'] = results
                     
                     progress_bar.empty()

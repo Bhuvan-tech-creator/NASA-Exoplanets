@@ -245,6 +245,99 @@ class ExoplanetDataProcessor:
             'missions_test': missions_test,
             'feature_columns': self.feature_columns
         }
+    
+    def merge_additional_data(self, csv_path):
+        """Merge additional CSV data with existing datasets for enhanced training"""
+        print(f"Merging additional data from {csv_path}...")
+        
+        try:
+            # Load the additional data
+            additional_data = pd.read_csv(csv_path)
+            print(f"Loaded {len(additional_data)} rows from additional dataset")
+            
+            # Try to map columns to standard format
+            column_mapping = {
+                # Common variations for period
+                'period': 'koi_period',
+                'orbital_period': 'koi_period',
+                'pl_orbper': 'koi_period',
+                
+                # Common variations for radius
+                'radius': 'koi_prad',
+                'planet_radius': 'koi_prad',
+                'pl_rade': 'koi_prad',
+                
+                # Common variations for temperature
+                'temperature': 'koi_teq',
+                'temp': 'koi_teq',
+                'pl_eqt': 'koi_teq',
+                
+                # Common variations for stellar properties
+                'stellar_temp': 'koi_steff',
+                'star_temp': 'koi_steff',
+                'st_teff': 'koi_steff',
+                
+                # Common variations for target
+                'target': 'is_exoplanet',
+                'label': 'is_exoplanet',
+                'disposition': 'koi_disposition',
+                'confirmed': 'is_exoplanet'
+            }
+            
+            # Apply column mapping
+            for old_col, new_col in column_mapping.items():
+                if old_col in additional_data.columns:
+                    additional_data = additional_data.rename(columns={old_col: new_col})
+            
+            # Process disposition column if present
+            if 'koi_disposition' in additional_data.columns and 'is_exoplanet' not in additional_data.columns:
+                additional_data['is_exoplanet'] = additional_data['koi_disposition'].map({
+                    'CONFIRMED': 1,
+                    'CANDIDATE': 1, 
+                    'PC': 1,
+                    'CP': 1,
+                    'FALSE POSITIVE': 0,
+                    'FP': 0,
+                    'NOT DISPOSITION': 0,
+                    'FALSE_POSITIVE': 0
+                })
+            
+            # Ensure target column exists
+            if 'is_exoplanet' not in additional_data.columns:
+                print("No target column found. Assuming all samples are positive examples.")
+                additional_data['is_exoplanet'] = 1
+            
+            # Add mission identifier
+            additional_data['mission'] = 'Additional'
+            
+            # Fill missing columns with default values
+            required_columns = [
+                'koi_period', 'koi_impact', 'koi_duration', 'koi_depth',
+                'koi_prad', 'koi_teq', 'koi_insol', 'koi_model_snr',
+                'koi_steff', 'koi_slogg', 'koi_srad', 'koi_kepmag'
+            ]
+            
+            for col in required_columns:
+                if col not in additional_data.columns:
+                    # Set reasonable defaults based on column
+                    if 'period' in col:
+                        additional_data[col] = 100.0
+                    elif 'temp' in col or 'steff' in col:
+                        additional_data[col] = 5778.0
+                    elif 'radius' in col or 'prad' in col:
+                        additional_data[col] = 1.0
+                    elif 'mag' in col:
+                        additional_data[col] = 12.0
+                    else:
+                        additional_data[col] = 0.0
+            
+            # Store the additional data for use in training
+            self.additional_data = additional_data
+            print(f"Successfully prepared {len(additional_data)} additional samples for training")
+            
+        except Exception as e:
+            print(f"Error merging additional data: {e}")
+            raise e
 
 if __name__ == "__main__":
     processor = ExoplanetDataProcessor()
