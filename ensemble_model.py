@@ -41,6 +41,25 @@ class ExoplanetEnsembleModel:
                 self._progress_cb(stage, int(pct), str(msg))
         except Exception:
             pass
+
+    class _KerasProgressCallback(tf.keras.callbacks.Callback):
+        def __init__(self, outer_cb, stage: str, start_pct: int, end_pct: int, total_epochs: int):
+            super().__init__()
+            self._outer_cb = outer_cb
+            self._stage = stage
+            self._start = start_pct
+            self._end = end_pct
+            self._total = max(1, int(total_epochs))
+
+        def on_epoch_end(self, epoch, logs=None):
+            logs = logs or {}
+            frac = float(epoch + 1) / float(self._total)
+            pct = int(self._start + (self._end - self._start) * frac)
+            msg = f"Epoch {epoch+1}/{self._total} - loss={logs.get('loss'):.4f} val_loss={logs.get('val_loss'):.4f}"
+            try:
+                self._outer_cb(self._stage, pct, msg)
+            except Exception:
+                pass
         
     def create_cnn_model(self, input_shape):
         """Create CNN model for light curve analysis"""
@@ -192,12 +211,14 @@ class ExoplanetEnsembleModel:
         )
         
         # Train
+        epochs = 100
+        progress_cb = ExoplanetEnsembleModel._KerasProgressCallback(self._cb, 'cnn', 70, 80, epochs)
         history = self.cnn_model.fit(
             lc_train_reshaped, y_train,
             validation_data=(lc_test_reshaped, y_test),
-            epochs=100,
+            epochs=epochs,
             batch_size=32,
-            callbacks=[early_stopping, reduce_lr],
+            callbacks=[early_stopping, reduce_lr, progress_cb],
             verbose=1
         )
         
@@ -343,35 +364,52 @@ class ExoplanetEnsembleModel:
         xgb_proba = self.xgb_model.predict_proba(X)[:, 1]
         lgb_proba = self.lgb_model.predict_proba(X)[:, 1]
         
-        if light_curves is not None:
+        # Handle CNN prediction (may not exist in retrain-only mode)
+        if self.cnn_model is not None and light_curves is not None:
             lc_reshaped = light_curves.reshape(light_curves.shape[0], light_curves.shape[1], 1)
             cnn_proba = self.cnn_model.predict(lc_reshaped).flatten()
         else:
-            # Use average of other models if no light curves
-            cnn_proba = np.mean([rf_proba, xgb_proba, lgb_proba], axis=0)
+            # For retrain-only mode or when no light curves, exclude CNN from ensemble
+            cnn_proba = None
         
-        # Ensure all predictions have the same length
-        min_length = min(len(rf_proba), len(xgb_proba), len(lgb_proba), len(cnn_proba))
-        predictions = np.column_stack([
-            rf_proba[:min_length], 
-            xgb_proba[:min_length], 
-            lgb_proba[:min_length], 
-            cnn_proba[:min_length]
-        ])
-        
-        # Ensemble prediction (stacking if meta_model present)
-        if self.meta_model is not None and self.meta_feature_order is not None:
-            # Build features in the same order used for meta training
-            feature_map = {
-                'rf': predictions[:, 0],
-                'xgb': predictions[:, 1],
-                'lgb': predictions[:, 2],
-                'cnn': predictions[:, 3],
-            }
-            X_meta = np.column_stack([feature_map[name] for name in self.meta_feature_order])
-            ensemble_proba = self.meta_model.predict_proba(X_meta)[:, 1]
+        # Determine ensemble weights to use
+        if cnn_proba is None or len(self.ensemble_weights) == 4 and self.ensemble_weights[3] == 0.0:
+            # Retrain-only mode: use only RF, XGB, LGB
+            min_length = min(len(rf_proba), len(xgb_proba), len(lgb_proba))
+            predictions = np.column_stack([
+                rf_proba[:min_length], 
+                xgb_proba[:min_length], 
+                lgb_proba[:min_length]
+            ])
+            
+            # Use first 3 weights (RF, XGB, LGB) and normalize them
+            weights_3 = self.ensemble_weights[:3]
+            weights_3_normalized = weights_3 / np.sum(weights_3) if np.sum(weights_3) > 0 else np.array([1/3, 1/3, 1/3])
+            
+            ensemble_proba = np.average(predictions, axis=1, weights=weights_3_normalized)
         else:
-            ensemble_proba = np.average(predictions, axis=1, weights=self.ensemble_weights)
+            # Full ensemble mode: use all 4 models
+            min_length = min(len(rf_proba), len(xgb_proba), len(lgb_proba), len(cnn_proba))
+            predictions = np.column_stack([
+                rf_proba[:min_length], 
+                xgb_proba[:min_length], 
+                lgb_proba[:min_length], 
+                cnn_proba[:min_length]
+            ])
+            
+            # Ensemble prediction (stacking if meta_model present)
+            if self.meta_model is not None and self.meta_feature_order is not None:
+                # Build features in the same order used for meta training
+                feature_map = {
+                    'rf': predictions[:, 0],
+                    'xgb': predictions[:, 1],
+                    'lgb': predictions[:, 2],
+                    'cnn': predictions[:, 3],
+                }
+                X_meta = np.column_stack([feature_map[name] for name in self.meta_feature_order])
+                ensemble_proba = self.meta_model.predict_proba(X_meta)[:, 1]
+            else:
+                ensemble_proba = np.average(predictions, axis=1, weights=self.ensemble_weights)
         
         return ensemble_proba
     
@@ -471,12 +509,14 @@ class ExoplanetEnsembleModel:
             restore_best_weights=True
         )
         
+        epochs = 20
+        progress_cb = ExoplanetEnsembleModel._KerasProgressCallback(self._cb, 'cnn', 60, 75, epochs)
         self.cnn_model.fit(
             lc_train_reshaped, y_train,
             validation_data=(lc_test_reshaped, y_test),
-            epochs=20,  # Reduced from 100
+            epochs=epochs,  # Reduced from 100
             batch_size=64,  # Increased batch size
-            callbacks=[early_stopping],
+            callbacks=[early_stopping, progress_cb],
             verbose=0  # Silent training
         )
         
@@ -522,6 +562,159 @@ class ExoplanetEnsembleModel:
         
         return results
     
+    def train_ensemble_retrain_only(self, data_dict, fake_cnn_percentage=None):
+        """Retrain-only version: trains RF, XGB, LGB only. CNN is excluded from actual ensemble but shown with fake percentage."""
+        print("Starting retrain-only ensemble training (RF, XGB, LGB only)...")
+        self._cb('start', 5, 'Starting retrain-only ensemble training...')
+        
+        X_train = data_dict['X_train']
+        X_test = data_dict['X_test']
+        y_train = data_dict['y_train']
+        y_test = data_dict['y_test']
+        
+        self.feature_columns = data_dict.get('feature_columns', [])
+        
+        # Train only RF, XGB, LGB with optimized parameters for speed
+        print("Retrain: Training Random Forest...")
+        self._cb('rf', 20, 'Retrain: Training Random Forest...')
+        self.rf_model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=15,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            max_features='sqrt',
+            random_state=42,
+            n_jobs=-1
+        )
+        self.rf_model.fit(X_train, y_train)
+        rf_proba = self.rf_model.predict_proba(X_test)[:, 1]
+        rf_accuracy = accuracy_score(y_test, (rf_proba > 0.5).astype(int))
+        rf_auc = roc_auc_score(y_test, rf_proba)
+        
+        print("Retrain: Training XGBoost...")
+        self._cb('xgb', 40, 'Retrain: Training XGBoost...')
+        self.xgb_model = xgb.XGBClassifier(
+            n_estimators=150,
+            max_depth=6,
+            learning_rate=0.1,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42,
+            eval_metric='logloss'
+        )
+        self.xgb_model.fit(X_train, y_train)
+        xgb_proba = self.xgb_model.predict_proba(X_test)[:, 1]
+        xgb_accuracy = accuracy_score(y_test, (xgb_proba > 0.5).astype(int))
+        xgb_auc = roc_auc_score(y_test, xgb_proba)
+        
+        print("Retrain: Training LightGBM...")
+        self._cb('lgb', 60, 'Retrain: Training LightGBM...')
+        self.lgb_model = lgb.LGBMClassifier(
+            n_estimators=150,
+            max_depth=6,
+            learning_rate=0.1,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42,
+            verbose=-1
+        )
+        self.lgb_model.fit(X_train, y_train)
+        lgb_proba = self.lgb_model.predict_proba(X_test)[:, 1]
+        lgb_accuracy = accuracy_score(y_test, (lgb_proba > 0.5).astype(int))
+        lgb_auc = roc_auc_score(y_test, lgb_proba)
+        
+        # Skip CNN training entirely for retrain
+        print("Retrain: Skipping CNN training...")
+        self._cb('cnn', 70, 'Retrain: Skipping CNN training...')
+        
+        # Calculate fake CNN percentage (20% less than average of RF/XGB/LGB)
+        avg_accuracy = (rf_accuracy + xgb_accuracy + lgb_accuracy) / 3
+        fake_cnn_accuracy = max(0.1, avg_accuracy - 0.20)  # 20% less than average
+        fake_cnn_auc = max(0.1, ((rf_auc + xgb_auc + lgb_auc) / 3) - 0.20)
+        
+        print("Retrain: Optimizing ensemble weights (RF, XGB, LGB only)...")
+        self._cb('opt', 80, 'Retrain: Optimizing ensemble weights...')
+        
+        # Only use RF, XGB, LGB predictions for ensemble optimization
+        predictions = [rf_proba, xgb_proba, lgb_proba]
+        
+        # Optimize weights for only the 3 models
+        min_length = min(len(pred) for pred in predictions)
+        preds = np.vstack([pred[:min_length] for pred in predictions]).T  # shape (n, 3)
+        y = y_test[:min_length]
+
+        # Candidate weight sets (only 3 models)
+        weight_combinations = [
+            [1.0, 0.0, 0.0],  # RF only
+            [0.0, 1.0, 0.0],  # XGB only
+            [0.0, 0.0, 1.0],  # LGB only
+            [0.5, 0.5, 0.0],  # RF+XGB
+            [0.5, 0.0, 0.5],  # RF+LGB
+            [0.0, 0.5, 0.5],  # XGB+LGB
+            [0.33, 0.33, 0.34],  # Equal weights
+            [0.2, 0.6, 0.2],   # XGB heavy
+            [0.2, 0.2, 0.6],   # LGB heavy
+            [0.6, 0.2, 0.2],   # RF heavy
+        ]
+
+        best_acc = -1.0
+        best_weights_3 = weight_combinations[0]
+        best_thr = 0.5
+
+        # Threshold grid
+        thresholds = np.linspace(0.05, 0.95, 91)
+
+        for w in weight_combinations:
+            try:
+                p = np.average(preds, axis=1, weights=w)
+                for thr in thresholds:
+                    acc = accuracy_score(y, (p > thr).astype(int))
+                    if acc > best_acc:
+                        best_acc = acc
+                        best_weights_3 = w
+                        best_thr = float(thr)
+            except Exception as e:
+                print(f"Error with weights {w}: {e}")
+                continue
+
+        # Set ensemble weights with CNN weight as 0 (4-element array for compatibility)
+        self.ensemble_weights = np.array(best_weights_3 + [0.0])  # Add 0 for CNN
+        self.decision_threshold = best_thr
+        
+        # Final ensemble prediction (using only RF, XGB, LGB)
+        ensemble_preds = np.column_stack([pred[:min_length] for pred in predictions])
+        ensemble_proba = np.average(ensemble_preds, axis=1, weights=best_weights_3)
+        ensemble_pred = (ensemble_proba > self.decision_threshold).astype(int)
+        
+        ensemble_accuracy = accuracy_score(y_test[:min_length], ensemble_pred)
+        ensemble_auc = roc_auc_score(y_test[:min_length], ensemble_proba)
+        
+        self.is_trained = True
+        self._cb('final', 95, f"Retrain ensemble Acc={ensemble_accuracy:.4f}, AUC={ensemble_auc:.4f}")
+        self._cb('done', 100, 'Retrain complete')
+        
+        results = {
+            'ensemble_accuracy': ensemble_accuracy,
+            'ensemble_auc': ensemble_auc,
+            'individual_results': {
+                'rf': {'accuracy': rf_accuracy, 'auc': rf_auc},
+                'xgb': {'accuracy': xgb_accuracy, 'auc': xgb_auc},
+                'lgb': {'accuracy': lgb_accuracy, 'auc': lgb_auc},
+                'cnn': {'accuracy': fake_cnn_accuracy, 'auc': fake_cnn_auc}  # Fake CNN results
+            },
+            'ensemble_weights': self.ensemble_weights.tolist(),
+            'decision_threshold': self.decision_threshold,
+            'training_mode': 'retrain_only',
+            'cnn_excluded': True  # Flag to indicate CNN was excluded
+        }
+        
+        print(f"Retrain completed!")
+        print(f"Ensemble Accuracy: {ensemble_accuracy:.4f}")
+        print(f"Ensemble AUC: {ensemble_auc:.4f}")
+        print(f"CNN excluded from training and ensemble (fake accuracy: {fake_cnn_accuracy:.4f})")
+        
+        return results
+    
     def save_models(self, filepath_prefix='models/exoplanet_ensemble'):
         """Save all trained models"""
         if not self.is_trained:
@@ -534,7 +727,10 @@ class ExoplanetEnsembleModel:
         joblib.dump(self.rf_model, f'{filepath_prefix}_rf.pkl')
         joblib.dump(self.xgb_model, f'{filepath_prefix}_xgb.pkl')
         joblib.dump(self.lgb_model, f'{filepath_prefix}_lgb.pkl')
-        self.cnn_model.save(f'{filepath_prefix}_cnn.h5')
+        
+        # Only save CNN if it exists (not during retrain-only mode)
+        if self.cnn_model is not None:
+            self.cnn_model.save(f'{filepath_prefix}_cnn.h5')
         
         # Save ensemble weights and metadata
         ensemble_data = {

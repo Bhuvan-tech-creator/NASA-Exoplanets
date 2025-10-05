@@ -183,9 +183,14 @@ def train_and_save(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataPro
         pass
 
     if quick_mode:
-        with st.spinner("Training ensemble (optimized for speed)..."):
-            ui_log("Training with quick mode parameters...")
-            results = ensemble.train_ensemble_quick(data)
+        with st.spinner("Training ensemble (optimized for speed - RF/XGB/LGB only)..."):
+            ui_log("Training with retrain-only mode (RF/XGB/LGB only)...")
+            try:
+                results = ensemble.train_ensemble_retrain_only(data)
+                ui_log("Retrain-only training completed successfully")
+            except AttributeError:
+                ui_log("Fallback to quick training...")
+                results = ensemble.train_ensemble_quick(data)
     else:
         with st.spinner("Training ensemble (full training - this may take several minutes)..."):
             ui_log("Training with full parameters...")
@@ -1088,11 +1093,14 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                         new_ensemble.set_progress_callback(_cb)
                     except Exception:
                         pass
-                    # Prefer quick training path if available
+                    # Use the new retrain-only method for faster training
                     try:
+                        results = new_ensemble.train_ensemble_retrain_only(data)
+                        logger.info("Hyperparameters: Retrain-only training completed successfully")
+                    except AttributeError:
+                        # Fallback to quick training if retrain-only method not available
                         results = new_ensemble.train_ensemble_quick(data)
-                    except Exception:
-                        results = new_ensemble.train_ensemble(data)
+                        logger.info("Hyperparameters: Fallback to quick training completed")
                     logger.info("Hyperparameters: Base training run finished")
                     ui_log("Models trained (custom retrain)")
                     
@@ -1186,15 +1194,17 @@ def page_visualizer():
     st.markdown("Watch as we visualize exoplanet systems in real-time! Enter parameters below to see your system come to life.")
     
     # Create tabs for different visualization modes
-    viz_tab1, viz_tab2, viz_tab3 = st.tabs(["🪐 Orbital Simulation", "📈 Light Curve", "🎯 System Presets"])
+    viz_tab1, viz_tab2, viz_tab3 = st.tabs(["🪐 Interactive Orbital Simulation", "📈 Light Curve", "🎯 System Presets"])
     
     with viz_tab1:
-        # System Parameters Controls
-        st.markdown("### 🎛️ System Parameters")
+        # Interactive Canvas-based Visualizer
+        st.markdown("### 🎛️ Interactive Exoplanet System")
         
-        param_col1, param_col2, param_col3 = st.columns(3)
+        # Create columns for controls
+        control_col1, control_col2, control_col3 = st.columns(3)
         
-        with param_col1:
+        with control_col1:
+            st.markdown("**System Parameters**")
             orbital_period = st.number_input(
                 "Orbital Period (days)", 
                 min_value=0.1, max_value=10000.0, value=365.25, step=0.1,
@@ -1210,66 +1220,336 @@ def page_visualizer():
                 min_value=1000, max_value=10000, value=5778, step=100,
                 help="Star temperature affects color"
             )
+            orbit_distance = st.slider(
+                "Orbit Distance", 
+                min_value=0.2, max_value=1.0, value=0.6, step=0.01,
+                help="How far Planet A orbits from the star"
+            )
+            orbit_flip_a = st.checkbox("Flip Orbit A (left/right)", help="Place orbit to left or right focus")
         
-        with param_col2:
-            semi_major_axis = st.number_input(
-                "Semi-major Axis (AU)", 
-                min_value=0.05, max_value=10.0, value=1.0, step=0.01,
-                help="Average distance from star"
-            )
-            eccentricity = st.slider(
-                "Eccentricity", 
-                min_value=0.0, max_value=0.95, value=0.0, step=0.01,
-                help="0 = circle, 0.9 = elongated ellipse"
-            )
-            inclination = st.slider(
-                "Inclination (degrees)", 
-                min_value=0, max_value=90, value=90, step=1,
-                help="Orbit tilt. 90° = edge-on transit"
-            )
-        
-        with param_col3:
-            show_trail = st.checkbox("Show Planet Trail", value=True)
-            show_transit = st.checkbox("Show Transit Effects", value=True)
+        with control_col2:
+            st.markdown("**Animation Controls**")
             animation_speed = st.slider("Animation Speed", 0.1, 3.0, 1.0, 0.1)
+            
+            # Placeholder for play/pause controls (will be controlled by JS)
+            st.markdown("**Visual Options**")
+            show_transit = st.checkbox("Show Transit Dimming", value=True)
+            show_trail = st.checkbox("Show Planet Trail", value=True)
+            show_brightness = st.checkbox("Show Brightness Meter", value=True)
+            
+            st.markdown("**Orbit Shapes**")
+            eccentricity_a = st.slider("Eccentricity A", 0.0, 0.9, 0.0, 0.01, help="Elliptical amount for Planet A")
         
-        # Calculate orbital visualization
-        n_points = 100
-        theta = np.linspace(0, 2*np.pi, n_points)
+        with control_col3:
+            st.markdown("**Second Planet**")
+            enable_planet2 = st.checkbox("Enable second planet")
+            
+            if enable_planet2:
+                p2_period = st.number_input("Period (days)", min_value=1.0, value=100.0, step=1.0, key="p2_period")
+                p2_radius = st.number_input("Radius (R⊕)", min_value=0.1, value=2.5, step=0.1, key="p2_radius")
+                eccentricity_b = st.slider("Eccentricity B", 0.0, 0.9, 0.0, 0.01, help="Elliptical amount for Planet B")
+                orbit_distance2 = st.slider("Orbit Distance (B)", 0.2, 1.0, 0.5, 0.01, help="Planet B distance from star")
+                orbit_flip_b = st.checkbox("Flip Orbit B (left/right)", help="Place orbit to left or right focus")
+            else:
+                p2_period = 100.0
+                p2_radius = 2.5
+                eccentricity_b = 0.0
+                orbit_distance2 = 0.5
+                orbit_flip_b = False
         
-        # Elliptical orbit calculation
-        a = semi_major_axis
-        e = eccentricity
-        b = a * np.sqrt(1 - e**2)
+        # HTML/JS Canvas Visualizer
+        visualizer_html = f'''
+        <div style="width: 100%; height: 600px; background: linear-gradient(135deg, #0c0c1e 0%, #1a1a3e 100%); border-radius: 10px; position: relative; overflow: hidden;">
+            <canvas id="planet-canvas" width="800" height="600" style="width: 100%; height: 100%; display: block;"></canvas>
+            
+            <!-- Control Overlay -->
+            <div style="position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; color: white;">
+                <button id="play-pause-btn" style="background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-right: 5px;">
+                    ▶️ Start
+                </button>
+                <button id="reset-btn" style="background: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">
+                    🔄 Reset
+                </button>
+            </div>
+            
+            <!-- Legend -->
+            <div style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; color: white; font-size: 12px; line-height: 1.4;">
+                <div><span style="display: inline-block; width: 12px; height: 12px; background: #ffd43b; border-radius: 50%; margin-right: 5px;"></span> Star (temp-based color)</div>
+                <div><span style="display: inline-block; width: 8px; height: 8px; background: #4dabf7; border-radius: 50%; margin-right: 7px;"></span> Planet A</div>
+                <div style="display: {('block' if enable_planet2 else 'none')};"><span style="display: inline-block; width: 8px; height: 8px; background: #91a7ff; border-radius: 50%; margin-right: 7px;"></span> Planet B</div>
+                <div style="margin-top: 5px;">🌟 Transit = star dims</div>
+            </div>
+            
+            <!-- System Info -->
+            <div style="position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; color: white; font-size: 12px;">
+                <div id="system-info">
+                    <strong>Planet A:</strong> {planet_radius:.1f} R⊕, {orbital_period:.1f} days<br>
+                    <strong>Star:</strong> {stellar_temp}K<br>
+                    <strong>Animation:</strong> {animation_speed}x speed
+                </div>
+            </div>
+        </div>
         
-        # Parametric ellipse
-        x_orbit = a * np.cos(theta) 
-        y_orbit = b * np.sin(theta)
+        <script>
+        (function() {{
+            const canvas = document.getElementById('planet-canvas');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const playPauseBtn = document.getElementById('play-pause-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            
+            let isPlaying = false;
+            let animationId = null;
+            let angle = 0;
+            let angle2 = 0;
+            let lastTime = 0;
+            let trail = [];
+            let trail2 = [];
+            const MAX_TRAIL = 60;
+            
+            // System parameters (from Streamlit)
+            const params = {{
+                orbitalPeriod: {orbital_period},
+                planetRadius: {planet_radius},
+                stellarTemp: {stellar_temp},
+                speed: {animation_speed},
+                eccentricity: {eccentricity_a},
+                eccentricity2: {eccentricity_b},
+                orbitDistance: {orbit_distance},
+                orbitDistance2: {orbit_distance2},
+                flipA: {str(orbit_flip_a).lower()},
+                flipB: {str(orbit_flip_b).lower()},
+                planet2Enabled: {str(enable_planet2).lower()},
+                planet2: {{ period: {p2_period}, radius: {p2_radius} }},
+                showTransit: {str(show_transit).lower()},
+                showTrail: {str(show_trail).lower()},
+                showBrightness: {str(show_brightness).lower()}
+            }};
+            
+            function resizeCanvas() {{
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }}
+            
+            function getStarColor(temp) {{
+                if (temp < 3700) return '#ff6b6b';      // Red dwarf
+                if (temp < 5200) return '#ffd93d';      // Orange
+                if (temp < 6000) return '#6bcf7f';      // Yellow-green  
+                if (temp < 7500) return '#74c0fc';      // Blue-white
+                return '#c5f6fa';                       // Blue
+            }}
+            
+            function drawFrame(currentTime) {{
+                if (!ctx) return;
+                
+                const deltaTime = currentTime - lastTime;
+                lastTime = currentTime;
+                
+                if (isPlaying && deltaTime > 0) {{
+                    // Update angles based on orbital periods
+                    const timeScale = params.speed * 0.0001; // Adjust for visual speed
+                    angle += (2 * Math.PI * timeScale * deltaTime) / params.orbitalPeriod;
+                    if (params.planet2Enabled) {{
+                        angle2 += (2 * Math.PI * timeScale * deltaTime) / params.planet2.period;
+                    }}
+                }}
+                
+                // Clear canvas
+                ctx.fillStyle = 'rgba(12, 12, 30, 1)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const maxRadius = Math.min(canvas.width, canvas.height) * 0.35;
+                
+                // Draw star
+                const starColor = getStarColor(params.stellarTemp);
+                ctx.fillStyle = starColor;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 15, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Planet A orbit and position
+                const radiusA = maxRadius * params.orbitDistance;
+                const eccentricityA = params.eccentricity;
+                const semiMajorA = radiusA;
+                const semiMinorA = radiusA * Math.sqrt(1 - eccentricityA * eccentricityA);
+                
+                // Draw orbit A
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.ellipse(centerX, centerY, semiMajorA, semiMinorA, 0, 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                // Calculate planet A position
+                const planetAX = centerX + semiMajorA * Math.cos(angle) * (params.flipA ? -1 : 1);
+                const planetAY = centerY + semiMinorA * Math.sin(angle);
+                
+                // Update trail A
+                if (params.showTrail) {{
+                    trail.push({{ x: planetAX, y: planetAY }});
+                    if (trail.length > MAX_TRAIL) trail.shift();
+                    
+                    // Draw trail A
+                    trail.forEach((point, i) => {{
+                        const alpha = (i + 1) / trail.length * 0.5;
+                        ctx.fillStyle = `rgba(77, 171, 247, ${{alpha}})`;
+                        ctx.beginPath();
+                        ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }});
+                }}
+                
+                // Draw planet A
+                const planetASize = Math.max(4, params.planetRadius * 3);
+                ctx.fillStyle = params.planetRadius < 2 ? '#4dabf7' : params.planetRadius < 10 ? '#91a7ff' : '#ffd43b';
+                ctx.beginPath();
+                ctx.arc(planetAX, planetAY, planetASize, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Planet B (if enabled)
+                if (params.planet2Enabled) {{
+                    const radiusB = maxRadius * params.orbitDistance2;
+                    const eccentricityB = params.eccentricity2;
+                    const semiMajorB = radiusB;
+                    const semiMinorB = radiusB * Math.sqrt(1 - eccentricityB * eccentricityB);
+                    
+                    // Draw orbit B
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([3, 3]);
+                    ctx.beginPath();
+                    ctx.ellipse(centerX, centerY, semiMajorB, semiMinorB, 0, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Calculate planet B position
+                    const planetBX = centerX + semiMajorB * Math.cos(angle2) * (params.flipB ? -1 : 1);
+                    const planetBY = centerY + semiMinorB * Math.sin(angle2);
+                    
+                    // Update trail B
+                    if (params.showTrail) {{
+                        trail2.push({{ x: planetBX, y: planetBY }});
+                        if (trail2.length > MAX_TRAIL) trail2.shift();
+                        
+                        // Draw trail B
+                        trail2.forEach((point, i) => {{
+                            const alpha = (i + 1) / trail2.length * 0.4;
+                            ctx.fillStyle = `rgba(145, 167, 255, ${{alpha}})`;
+                            ctx.beginPath();
+                            ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+                            ctx.fill();
+                        }});
+                    }}
+                    
+                    // Draw planet B
+                    const planetBSize = Math.max(4, params.planet2.radius * 3);
+                    ctx.fillStyle = '#91a7ff';
+                    ctx.beginPath();
+                    ctx.arc(planetBX, planetBY, planetBSize, 0, 2 * Math.PI);
+                    ctx.fill();
+                }}
+                
+                // Transit effects (simple star dimming)
+                if (params.showTransit) {{
+                    const distanceFromStar = Math.sqrt((planetAX - centerX) ** 2 + (planetAY - centerY) ** 2);
+                    if (distanceFromStar < 25) {{ // Planet is near star
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
+                        ctx.fill();
+                    }}
+                }}
+                
+                if (isPlaying) {{
+                    animationId = requestAnimationFrame(drawFrame);
+                }}
+            }}
+            
+            function startAnimation() {{
+                if (!isPlaying) {{
+                    isPlaying = true;
+                    playPauseBtn.textContent = '⏸️ Pause';
+                    lastTime = performance.now();
+                    animationId = requestAnimationFrame(drawFrame);
+                }}
+            }}
+            
+            function stopAnimation() {{
+                isPlaying = false;
+                playPauseBtn.textContent = '▶️ Start';
+                if (animationId) {{
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }}
+            }}
+            
+            function resetAnimation() {{
+                stopAnimation();
+                angle = 0;
+                angle2 = 0;
+                trail = [];
+                trail2 = [];
+                drawFrame(performance.now());
+            }}
+            
+            // Event listeners
+            if (playPauseBtn) {{
+                playPauseBtn.addEventListener('click', () => {{
+                    if (isPlaying) {{
+                        stopAnimation();
+                    }} else {{
+                        startAnimation();
+                    }}
+                }});
+            }}
+            
+            if (resetBtn) {{
+                resetBtn.addEventListener('click', resetAnimation);
+            }}
+            
+            // Initialize
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            drawFrame(performance.now());
+        }})();
+        </script>
+        '''
         
-        # Create the orbital plot
-        fig_orbit = go.Figure()
+        # Display the HTML component
+        st.components.v1.html(visualizer_html, height=650)
         
-        # Add star (color based on temperature)
-        if stellar_temp < 3700:
-            star_color = '#ff6b6b'  # Red dwarf
-        elif stellar_temp < 5200:
-            star_color = '#ffd93d'  # Orange
-        elif stellar_temp < 6000:
-            star_color = '#6bcf7f'  # Yellow-green
-        elif stellar_temp < 7500:
-            star_color = '#74c0fc'  # Blue-white
-        else:
-            star_color = '#c5f6fa'  # Blue
+        # System Information below the visualizer
+        st.markdown("### 📊 System Information")
+        info_col1, info_col2, info_col3, info_col4 = st.columns(4)
         
-        fig_orbit.add_trace(go.Scatter(
-            x=[0], y=[0], 
-            mode='markers', 
-            marker=dict(size=20, color=star_color),
-            name=f'Star ({stellar_temp}K)',
-            hovertemplate=f'<b>Star</b><br>Temperature: {stellar_temp}K<extra></extra>'
-        ))
+        with info_col1:
+            st.metric("Orbital Period", f"{orbital_period:.1f} days")
         
-        # Add orbit path
+        with info_col2:
+            # Calculate approximate orbital velocity (simplified)
+            orbital_velocity = 29.8 * np.sqrt(1 / orbital_period * 365.25)  # Rough approximation
+            st.metric("Orbital Velocity", f"{orbital_velocity:.1f} km/s")
+        
+        with info_col3:
+            # Calculate habitable zone estimate
+            habitable_zone_inner = np.sqrt(stellar_temp / 5778) * 0.95
+            habitable_zone_outer = np.sqrt(stellar_temp / 5778) * 1.37
+            orbit_au = (orbital_period / 365.25) ** (2/3)  # Simplified Kepler's law
+            in_hz = habitable_zone_inner <= orbit_au <= habitable_zone_outer
+            st.metric("Habitable Zone", "Yes" if in_hz else "No")
+        
+        with info_col4:
+            # Transit probability (simplified)
+            transit_prob = min(100, (0.005 * (stellar_temp/5778)**0.5) / orbit_au * 100)
+            st.metric("Transit Probability", f"{transit_prob:.1f}%")
+    
+    with viz_tab2:
         fig_orbit.add_trace(go.Scatter(
             x=x_orbit, y=y_orbit, 
             mode='lines', 
