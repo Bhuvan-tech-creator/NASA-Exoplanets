@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}Visualizer - NASA Exoplanet Detection System{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-5">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="text-center mb-4">🌌 Exoplanet Visualizer</h1>
+            <p class="text-center text-muted mb-5">
+                Watch as we visualize exoplanet systems in real-time! Enter parameters below to see your system come to life.
+            </p>
+        </div>
+    </div>
+    
+    <div class="row justify-content-center">
+        <div class="col-12 col-xxl-11">
+            <div class="card shadow-lg">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0"><i class="fas fa-globe-americas me-2"></i>Interactive Exoplanet System</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-12">
+                            <div id="exoplanet-visualizer" class="visualizer-container">
+                                <canvas id="planet-canvas"></canvas>
+                                <!-- Overlay Legend -->
+                                <div class="viz-legend">
+                                    <div><span class="legend-dot star"></span> Star color = temperature</div>
+                                    <div><span class="legend-line orbit"></span> Orbit size = distance</div>
+                                    <div><span class="legend-line wobble"></span> Wobble = radial velocity</div>
+                                    <div><span class="legend-dot p1"></span> Planet A</div>
+                                    <div><span class="legend-dot p2"></span> Planet B</div>
+                                    <div>Eccentricity slider: 0 = circle, 0.9 = elongated</div>
+                                </div>
+                                <div class="viz-facts" id="viz-facts">Tip: Try a Hot Jupiter preset for fast orbits!</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Controls underneath in responsive columns -->
+                    <div class="row row-cols-1 row-cols-lg-3 g-4 mt-1">
+                        <div class="col">
+                            <div class="visualizer-controls h-100">
+                                <h5>System Parameters</h5>
+                                <form id="visualizer-form" class="mb-3">
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="form-label">
+                                                <i class="fas fa-clock me-1"></i>Orbital Period (days)
+                                                <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" title="Time for one orbit. Earth: 365 days, Hot Jupiter: ~3 days, Jupiter: 4333 days"></i>
+                                            </label>
+                                            <input type="number" class="form-control" id="vis-orbital-period" step="0.1" value="365">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label"><i class="fas fa-globe me-1"></i>Planet Radius (R⊕)</label>
+                                            <input type="number" class="form-control" id="vis-planet-radius" step="0.1" value="1.0">
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label"><i class="fas fa-sun me-1"></i>Stellar Temp (K)</label>
+                                            <input type="number" class="form-control" id="vis-stellar-temp" step="100" value="5778">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label">Orbit Distance (A)</label>
+                                            <input type="range" class="form-range" id="orbit-distance" min="0.2" max="1" step="0.01" value="0.6">
+                                            <div class="form-check mt-1">
+                                                <input class="form-check-input" type="checkbox" id="orbit-flip-a">
+                                                <label class="form-check-label" for="orbit-flip-a">Flip Orbit A (left/right)</label>
+                                            </div>
+                                            <small class="text-muted">How far Planet A orbits from the star (relative to view). Flip to place the orbit to the left or right focus.</small>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-sm w-100 mt-2">
+                                        <i class="fas fa-sync me-1"></i>Update System
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="col">
+                            <div class="visualizer-controls h-100">
+                                <h5>Animation Controls</h5>
+                                <div class="mb-2">
+                                    <label class="form-label">Orbital Speed</label>
+                                    <input type="range" class="form-range" id="speed-control" min="0.1" max="3" step="0.1" value="1">
+                                    <small class="text-muted">Adjust animation speed</small>
+                                </div>
+                                <div class="mt-2">
+                                    <button class="btn btn-outline-primary btn-sm" id="play-pause-btn"><i class="fas fa-play"></i> Start</button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="reset-btn"><i class="fas fa-redo"></i> Reset</button>
+                                </div>
+                                <hr>
+                                <h6>Visual Options</h6>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="toggle-transit" checked>
+                                    <label class="form-check-label" for="toggle-transit">Show Transit Dimming</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="toggle-trail" checked>
+                                    <label class="form-check-label" for="toggle-trail">Show Planet Trail</label>
+                                </div>
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" id="toggle-brightness" checked>
+                                    <label class="form-check-label" for="toggle-brightness">Show Brightness Meter</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col">
+                            <div class="visualizer-controls h-100">
+                                <h5>Orbit Shapes</h5>
+                                <label class="form-label" for="eccentricity-control">Eccentricity A</label>
+                                <input type="range" class="form-range" id="eccentricity-control" min="0" max="0.9" step="0.01" value="0">
+                                <small class="text-muted">Elliptical amount for Planet A</small>
+                                <div class="mt-3">
+                                    <label class="form-label" for="eccentricity2-control">Eccentricity B</label>
+                                    <input type="range" class="form-range" id="eccentricity2-control" min="0" max="0.9" step="0.01" value="0">
+                                    <small class="text-muted">Elliptical amount for Planet B</small>
+                                </div>
+                                <div class="mt-3">
+                                    <label class="form-label" for="orbit-distance2">Orbit Distance (B)</label>
+                                    <input type="range" class="form-range" id="orbit-distance2" min="0.2" max="1" step="0.01" value="0.5">
+                                    <div class="form-check mt-1">
+                                        <input class="form-check-input" type="checkbox" id="orbit-flip-b">
+                                        <label class="form-check-label" for="orbit-flip-b">Flip Orbit B (left/right)</label>
+                                    </div>
+                                    <small class="text-muted">Planet B distance from star (relative to view). Flip to place the orbit to the left or right focus.</small>
+                                </div>
+                                <hr>
+                                <h6>Second Planet</h6>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="toggle-planet2">
+                                    <label class="form-check-label" for="toggle-planet2">Enable second planet</label>
+                                </div>
+                                <div class="row g-2 align-items-center mb-2">
+                                    <div class="col-6">
+                                        <label class="form-label mb-0">Period (days)</label>
+                                        <input type="number" class="form-control form-control-sm" id="p2-period" value="100">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label mb-0">Radius (Earth radii)</label>
+                                        <input type="number" class="form-control form-control-sm" id="p2-radius" value="2.5" step="0.1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="system-info">
+                                <h6>Current System</h6>
+                                <div id="system-stats">
+                                    <p><strong>Star:</strong> <span id="star-info">Sun-like</span></p>
+                                    <p><strong>Planet:</strong> <span id="planet-info">Earth-like</span></p>
+                                    <p><strong>Orbit:</strong> <span id="orbit-info">365 days</span></p>
+                                    <p><strong>Distance:</strong> <span id="distance-info">1.0 AU</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Preset Systems -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <h3 class="text-center mb-4">Explore Preset Systems</h3>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="card h-100 preset-card" data-preset="earth">
+                        <div class="card-body text-center">
+                            <i class="fas fa-globe-americas fa-2x text-primary mb-2"></i>
+                            <h6>Earth-like</h6>
+                            <small class="text-muted">365 days, 1.0 R⊕</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card h-100 preset-card" data-preset="jupiter">
+                        <div class="card-body text-center">
+                            <i class="fas fa-circle fa-2x text-warning mb-2"></i>
+                            <h6>Jupiter-like</h6>
+                            <small class="text-muted">4333 days, 11.2 R⊕</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card h-100 preset-card" data-preset="hotjupiter">
+                        <div class="card-body text-center">
+                            <i class="fas fa-fire fa-2x text-danger mb-2"></i>
+                            <h6>Hot Jupiter</h6>
+                            <small class="text-muted">3 days, 10.0 R⊕</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card h-100 preset-card" data-preset="superearth">
+                        <div class="card-body text-center">
+                            <i class="fas fa-mountain fa-2x text-success mb-2"></i>
+                            <h6>Super Earth</h6>
+                            <small class="text-muted">100 days, 2.5 R⊕</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.preset-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.preset-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}

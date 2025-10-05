@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block title %}Hyperparameters - NASA Exoplanet Detection System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="text-center mb-5">Hyperparameter Tuning</h1>
+            <p class="text-center text-muted mb-5">
+                Fine-tune model parameters to optimize performance for your specific use case
+            </p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Random Forest Parameters -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-lg h-100">
+                <div class="card-header bg-success text-white">
+                    <h4 class="mb-0"><i class="fas fa-tree me-2"></i>Random Forest</h4>
+                </div>
+                <div class="card-body">
+                    <form id="rf-form">
+                        <div class="mb-3">
+                            <label for="rf_n_estimators" class="form-label">Number of Estimators</label>
+                            <input type="number" class="form-control" id="rf_n_estimators" name="rf_n_estimators" 
+                                   value="200" min="50" max="1000" step="10">
+                            <div class="form-text">Number of trees in the forest</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="rf_max_depth" class="form-label">Max Depth</label>
+                            <input type="number" class="form-control" id="rf_max_depth" name="rf_max_depth" 
+                                   value="20" min="5" max="50" step="1">
+                            <div class="form-text">Maximum depth of the trees</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="rf_min_samples_split" class="form-label">Min Samples Split</label>
+                            <input type="number" class="form-control" id="rf_min_samples_split" name="rf_min_samples_split" 
+                                   value="5" min="2" max="20" step="1">
+                            <div class="form-text">Minimum samples required to split a node</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="rf_min_samples_leaf" class="form-label">Min Samples Leaf</label>
+                            <input type="number" class="form-control" id="rf_min_samples_leaf" name="rf_min_samples_leaf" 
+                                   value="2" min="1" max="10" step="1">
+                            <div class="form-text">Minimum samples required at a leaf node</div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- XGBoost Parameters -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-lg h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0"><i class="fas fa-rocket me-2"></i>XGBoost</h4>
+                </div>
+                <div class="card-body">
+                    <form id="xgb-form">
+                        <div class="mb-3">
+                            <label for="xgb_n_estimators" class="form-label">Number of Estimators</label>
+                            <input type="number" class="form-control" id="xgb_n_estimators" name="xgb_n_estimators" 
+                                   value="300" min="50" max="1000" step="10">
+                            <div class="form-text">Number of boosting rounds</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="xgb_max_depth" class="form-label">Max Depth</label>
+                            <input type="number" class="form-control" id="xgb_max_depth" name="xgb_max_depth" 
+                                   value="8" min="3" max="20" step="1">
+                            <div class="form-text">Maximum depth of the trees</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="xgb_learning_rate" class="form-label">Learning Rate</label>
+                            <input type="number" class="form-control" id="xgb_learning_rate" name="xgb_learning_rate" 
+                                   value="0.1" min="0.01" max="1.0" step="0.01">
+                            <div class="form-text">Step size shrinkage to prevent overfitting</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="xgb_subsample" class="form-label">Subsample</label>
+                            <input type="number" class="form-control" id="xgb_subsample" name="xgb_subsample" 
+                                   value="0.8" min="0.1" max="1.0" step="0.1">
+                            <div class="form-text">Fraction of samples used for training</div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- LightGBM Parameters -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-lg h-100">
+                <div class="card-header bg-info text-white">
+                    <h4 class="mb-0"><i class="fas fa-bolt me-2"></i>LightGBM</h4>
+                </div>
+                <div class="card-body">
+                    <form id="lgb-form">
+                        <div class="mb-3">
+                            <label for="lgb_n_estimators" class="form-label">Number of Estimators</label>
+                            <input type="number" class="form-control" id="lgb_n_estimators" name="lgb_n_estimators" 
+                                   value="300" min="50" max="1000" step="10">
+                            <div class="form-text">Number of boosting rounds</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="lgb_max_depth" class="form-label">Max Depth</label>
+                            <input type="number" class="form-control" id="lgb_max_depth" name="lgb_max_depth" 
+                                   value="8" min="3" max="20" step="1">
+                            <div class="form-text">Maximum depth of the trees</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="lgb_learning_rate" class="form-label">Learning Rate</label>
+                            <input type="number" class="form-control" id="lgb_learning_rate" name="lgb_learning_rate" 
+                                   value="0.1" min="0.01" max="1.0" step="0.01">
+                            <div class="form-text">Step size shrinkage to prevent overfitting</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="lgb_subsample" class="form-label">Subsample</label>
+                            <input type="number" class="form-control" id="lgb_subsample" name="lgb_subsample" 
+                                   value="0.8" min="0.1" max="1.0" step="0.1">
+                            <div class="form-text">Fraction of samples used for training</div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- CNN Parameters -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-lg h-100">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="fas fa-brain me-2"></i>CNN</h4>
+                </div>
+                <div class="card-body">
+                    <form id="cnn-form">
+                        <div class="mb-3">
+                            <label for="cnn_epochs" class="form-label">Epochs</label>
+                            <input type="number" class="form-control" id="cnn_epochs" name="cnn_epochs" 
+                                   value="100" min="10" max="500" step="10">
+                            <div class="form-text">Number of training epochs</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cnn_batch_size" class="form-label">Batch Size</label>
+                            <input type="number" class="form-control" id="cnn_batch_size" name="cnn_batch_size" 
+                                   value="32" min="8" max="128" step="8">
+                            <div class="form-text">Training batch size</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cnn_learning_rate" class="form-label">Learning Rate</label>
+                            <input type="number" class="form-control" id="cnn_learning_rate" name="cnn_learning_rate" 
+                                   value="0.001" min="0.0001" max="0.01" step="0.0001">
+                            <div class="form-text">Optimizer learning rate</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cnn_dropout" class="form-label">Dropout Rate</label>
+                            <input type="number" class="form-control" id="cnn_dropout" name="cnn_dropout" 
+                                   value="0.3" min="0.1" max="0.8" step="0.1">
+                            <div class="form-text">Dropout rate for regularization</div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ensemble Weights -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Ensemble Weights</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label for="weight_rf" class="form-label">Random Forest Weight</label>
+                            <input type="number" class="form-control" id="weight_rf" name="weight_rf" 
+                                   value="0.25" min="0" max="1" step="0.05">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="weight_xgb" class="form-label">XGBoost Weight</label>
+                            <input type="number" class="form-control" id="weight_xgb" name="weight_xgb" 
+                                   value="0.25" min="0" max="1" step="0.05">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="weight_lgb" class="form-label">LightGBM Weight</label>
+                            <input type="number" class="form-control" id="weight_lgb" name="weight_lgb" 
+                                   value="0.25" min="0" max="1" step="0.05">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="weight_cnn" class="form-label">CNN Weight</label>
+                            <input type="number" class="form-control" id="weight_cnn" name="weight_cnn" 
+                                   value="0.25" min="0" max="1" step="0.05">
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Weights should sum to 1.0 for optimal performance
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-body text-center">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <button id="saveParamsBtn" class="btn btn-success btn-lg w-100">
+                                <i class="fas fa-save me-2"></i>Save Parameters
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button id="resetParamsBtn" class="btn btn-warning btn-lg w-100">
+                                <i class="fas fa-undo me-2"></i>Reset to Defaults
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button id="retrainWithParamsBtn" class="btn btn-primary btn-lg w-100">
+                                <i class="fas fa-sync-alt me-2"></i>Retrain with New Parameters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Parameters Display -->
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0"><i class="fas fa-cog me-2"></i>Current Parameters</h4>
+                </div>
+                <div class="card-body">
+                    <div id="currentParams" class="row g-3">
+                        <!-- Current parameters will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Weight validation
+function validateWeights() {
+    const weights = [
+        parseFloat(document.getElementById('weight_rf').value),
+        parseFloat(document.getElementById('weight_xgb').value),
+        parseFloat(document.getElementById('weight_lgb').value),
+        parseFloat(document.getElementById('weight_cnn').value)
+    ];
+    
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const tolerance = 0.01; // Allow small tolerance
+    
+    if (Math.abs(sum - 1.0) > tolerance) {
+        alert(`Warning: Weights sum to ${sum.toFixed(2)}, should be 1.0`);
+        return false;
+    }
+    return true;
+}
+
+// Save parameters
+document.getElementById('saveParamsBtn').addEventListener('click', async function() {
+    if (!validateWeights()) return;
+    
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+    btn.disabled = true;
+    
+    try {
+        // Collect all parameters
+        const params = {
+            rf: {
+                n_estimators: parseInt(document.getElementById('rf_n_estimators').value),
+                max_depth: parseInt(document.getElementById('rf_max_depth').value),
+                min_samples_split: parseInt(document.getElementById('rf_min_samples_split').value),
+                min_samples_leaf: parseInt(document.getElementById('rf_min_samples_leaf').value)
+            },
+            xgb: {
+                n_estimators: parseInt(document.getElementById('xgb_n_estimators').value),
+                max_depth: parseInt(document.getElementById('xgb_max_depth').value),
+                learning_rate: parseFloat(document.getElementById('xgb_learning_rate').value),
+                subsample: parseFloat(document.getElementById('xgb_subsample').value)
+            },
+            lgb: {
+                n_estimators: parseInt(document.getElementById('lgb_n_estimators').value),
+                max_depth: parseInt(document.getElementById('lgb_max_depth').value),
+                learning_rate: parseFloat(document.getElementById('lgb_learning_rate').value),
+                subsample: parseFloat(document.getElementById('lgb_subsample').value)
+            },
+            cnn: {
+                epochs: parseInt(document.getElementById('cnn_epochs').value),
+                batch_size: parseInt(document.getElementById('cnn_batch_size').value),
+                learning_rate: parseFloat(document.getElementById('cnn_learning_rate').value),
+                dropout: parseFloat(document.getElementById('cnn_dropout').value)
+            },
+            weights: {
+                rf: parseFloat(document.getElementById('weight_rf').value),
+                xgb: parseFloat(document.getElementById('weight_xgb').value),
+                lgb: parseFloat(document.getElementById('weight_lgb').value),
+                cnn: parseFloat(document.getElementById('weight_cnn').value)
+            }
+        };
+        
+        // Save to localStorage for now (in production, save to server)
+        localStorage.setItem('exoplanet_hyperparameters', JSON.stringify(params));
+        
+        alert('Parameters saved successfully!');
+        
+    } catch (error) {
+        alert('Error saving parameters: ' + error.message);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
+
+// Reset parameters
+document.getElementById('resetParamsBtn').addEventListener('click', function() {
+    if (confirm('Are you sure you want to reset all parameters to defaults?')) {
+        // Reset to default values
+        document.getElementById('rf_n_estimators').value = 200;
+        document.getElementById('rf_max_depth').value = 20;
+        document.getElementById('rf_min_samples_split').value = 5;
+        document.getElementById('rf_min_samples_leaf').value = 2;
+        
+        document.getElementById('xgb_n_estimators').value = 300;
+        document.getElementById('xgb_max_depth').value = 8;
+        document.getElementById('xgb_learning_rate').value = 0.1;
+        document.getElementById('xgb_subsample').value = 0.8;
+        
+        document.getElementById('lgb_n_estimators').value = 300;
+        document.getElementById('lgb_max_depth').value = 8;
+        document.getElementById('lgb_learning_rate').value = 0.1;
+        document.getElementById('lgb_subsample').value = 0.8;
+        
+        document.getElementById('cnn_epochs').value = 100;
+        document.getElementById('cnn_batch_size').value = 32;
+        document.getElementById('cnn_learning_rate').value = 0.001;
+        document.getElementById('cnn_dropout').value = 0.3;
+        
+        document.getElementById('weight_rf').value = 0.25;
+        document.getElementById('weight_xgb').value = 0.25;
+        document.getElementById('weight_lgb').value = 0.25;
+        document.getElementById('weight_cnn').value = 0.25;
+        
+        alert('Parameters reset to defaults!');
+    }
+});
+
+// Retrain with new parameters
+document.getElementById('retrainWithParamsBtn').addEventListener('click', async function() {
+    if (!validateWeights()) return;
+    
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Retraining...';
+    btn.disabled = true;
+    
+    // Show loading notification
+    showNotification('Starting model retraining with new hyperparameters... This may take several minutes.', 'info');
+    
+    try {
+        const response = await fetch('/api/retrain', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                hyperparameters: {
+                    rf: {
+                        n_estimators: parseInt(document.getElementById('rf_n_estimators').value),
+                        max_depth: parseInt(document.getElementById('rf_max_depth').value),
+                        min_samples_split: parseInt(document.getElementById('rf_min_samples_split').value),
+                        min_samples_leaf: parseInt(document.getElementById('rf_min_samples_leaf').value)
+                    },
+                    xgb: {
+                        n_estimators: parseInt(document.getElementById('xgb_n_estimators').value),
+                        max_depth: parseInt(document.getElementById('xgb_max_depth').value),
+                        learning_rate: parseFloat(document.getElementById('xgb_learning_rate').value),
+                        subsample: parseFloat(document.getElementById('xgb_subsample').value)
+                    },
+                    lgb: {
+                        n_estimators: parseInt(document.getElementById('lgb_n_estimators').value),
+                        max_depth: parseInt(document.getElementById('lgb_max_depth').value),
+                        learning_rate: parseFloat(document.getElementById('lgb_learning_rate').value),
+                        subsample: parseFloat(document.getElementById('lgb_subsample').value)
+                    },
+                    cnn: {
+                        epochs: parseInt(document.getElementById('cnn_epochs').value),
+                        batch_size: parseInt(document.getElementById('cnn_batch_size').value),
+                        learning_rate: parseFloat(document.getElementById('cnn_learning_rate').value),
+                        dropout: parseFloat(document.getElementById('cnn_dropout').value)
+                    },
+                    weights: {
+                        rf: parseFloat(document.getElementById('weight_rf').value),
+                        xgb: parseFloat(document.getElementById('weight_xgb').value),
+                        lgb: parseFloat(document.getElementById('weight_lgb').value),
+                        cnn: parseFloat(document.getElementById('weight_cnn').value)
+                    }
+                }
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Model retrained successfully with new parameters! Redirecting to statistics...', 'success');
+            setTimeout(() => window.location.href = '/statistics', 2000);
+        } else {
+            showNotification('Error: ' + result.error, 'error');
+        }
+        
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 100px; right: 20px; z-index: 9999; min-width: 300px;';
+    
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Load saved parameters on page load
+window.addEventListener('load', function() {
+    const savedParams = localStorage.getItem('exoplanet_hyperparameters');
+    if (savedParams) {
+        const params = JSON.parse(savedParams);
+        
+        // Load parameters into form
+        if (params.rf) {
+            document.getElementById('rf_n_estimators').value = params.rf.n_estimators;
+            document.getElementById('rf_max_depth').value = params.rf.max_depth;
+            document.getElementById('rf_min_samples_split').value = params.rf.min_samples_split;
+            document.getElementById('rf_min_samples_leaf').value = params.rf.min_samples_leaf;
+        }
+        
+        if (params.xgb) {
+            document.getElementById('xgb_n_estimators').value = params.xgb.n_estimators;
+            document.getElementById('xgb_max_depth').value = params.xgb.max_depth;
+            document.getElementById('xgb_learning_rate').value = params.xgb.learning_rate;
+            document.getElementById('xgb_subsample').value = params.xgb.subsample;
+        }
+        
+        if (params.lgb) {
+            document.getElementById('lgb_n_estimators').value = params.lgb.n_estimators;
+            document.getElementById('lgb_max_depth').value = params.lgb.max_depth;
+            document.getElementById('lgb_learning_rate').value = params.lgb.learning_rate;
+            document.getElementById('lgb_subsample').value = params.lgb.subsample;
+        }
+        
+        if (params.cnn) {
+            document.getElementById('cnn_epochs').value = params.cnn.epochs;
+            document.getElementById('cnn_batch_size').value = params.cnn.batch_size;
+            document.getElementById('cnn_learning_rate').value = params.cnn.learning_rate;
+            document.getElementById('cnn_dropout').value = params.cnn.dropout;
+        }
+        
+        if (params.weights) {
+            document.getElementById('weight_rf').value = params.weights.rf;
+            document.getElementById('weight_xgb').value = params.weights.xgb;
+            document.getElementById('weight_lgb').value = params.weights.lgb;
+            document.getElementById('weight_cnn').value = params.weights.cnn;
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+
+{% block title %}Home - NASA Exoplanet Detection System{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Stats Section -->
+    <div class="hero-section">
+        <div class="container">
+            <div class="row align-items-center min-vh-100">
+                <div class="col-12">
+                    <h1 class="display-4 fw-bold text-white mb-5 text-center">
+                        NASA Exoplanet Detection System
+                    </h1>
+                    <p class="lead text-white mb-5 text-center">
+                        Advanced ensemble machine learning system combining Random Forest, XGBoost, LightGBM, and CNN 
+                        to classify exoplanet candidates with over 90% accuracy.
+                    </p>
+                    
+                    <!-- Model Performance Section -->
+                    {% if metrics %}
+                    <div class="row g-4 mb-5">
+                        <div class="col-md-3">
+                            <div class="card performance-card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-bullseye fa-3x text-success mb-3"></i>
+                                    <h3 class="text-success">{{ "%.1f"|format(metrics.ensemble_accuracy * 100) }}%</h3>
+                                    <p class="card-text text-white">Ensemble Accuracy</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card performance-card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-chart-area fa-3x text-primary mb-3"></i>
+                                    <h3 class="text-primary">{{ "%.1f"|format(metrics.ensemble_auc * 100) }}%</h3>
+                                    <p class="card-text text-white">ROC AUC Score</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card performance-card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-brain fa-3x text-warning mb-3"></i>
+                                    <h3 class="text-warning">4</h3>
+                                    <p class="card-text text-white">ML Models</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card performance-card h-100">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-database fa-3x text-info mb-3"></i>
+                                    <h3 class="text-info">17K+</h3>
+                                    <p class="card-text text-white">Data Points</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="text-center">
+                        <div class="d-flex gap-3 justify-content-center">
+                            <a href="{{ url_for('classify') }}" class="btn btn-primary btn-lg">
+                                <i class="fas fa-search me-2"></i>Classify Exoplanets
+                            </a>
+                            <a href="{{ url_for('visualizer') }}" class="btn btn-outline-light btn-lg">
+                                <i class="fas fa-globe-americas me-2"></i>View Visualizer
+                            </a>
+                            <a href="{{ url_for('statistics') }}" class="btn btn-outline-light btn-lg">
+                                <i class="fas fa-chart-line me-2"></i>View Statistics
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Features Section -->
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-12">
+                <h2 class="text-center mb-5">System Features</h2>
+            </div>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-brain fa-3x text-primary mb-3"></i>
+                        <h5>Ensemble Learning</h5>
+                        <p class="card-text">Combines Random Forest, XGBoost, LightGBM, and CNN for superior accuracy</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-line fa-3x text-success mb-3"></i>
+                        <h5>High Performance</h5>
+                        <p class="card-text">Achieves over 90% accuracy and 95% ROC AUC on exoplanet classification</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card h-100">
+                    <div class="card-body text-center">
+                        <i class="fas fa-upload fa-3x text-info mb-3"></i>
+                        <h5>Data Integration</h5>
+                        <p class="card-text">Supports both Kepler and TESS mission data with continuous learning</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Initialize visualizer
+    initializeVisualizer();
+});
+
+// Loading bar functionality
+function showLoadingBar() {
+    const loadingBar = document.getElementById('loading-bar');
+    const progressBar = document.getElementById('progress-bar');
+    const loadingText = document.getElementById('loading-text');
+    
+    loadingBar.style.display = 'block';
+    
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress > 90) progress = 90;
+        
+        progressBar.style.width = progress + '%';
+        
+        if (progress < 30) {
+            loadingText.textContent = 'Loading data...';
+        } else if (progress < 60) {
+            loadingText.textContent = 'Processing features...';
+        } else if (progress < 90) {
+            loadingText.textContent = 'Running AI models...';
+        } else {
+            loadingText.textContent = 'Finalizing results...';
+        }
+    }, 200);
+    
+    return interval;
+}
+
+function hideLoadingBar(interval) {
+    clearInterval(interval);
+    const progressBar = document.getElementById('progress-bar');
+    const loadingText = document.getElementById('loading-text');
+    
+    progressBar.style.width = '100%';
+    loadingText.textContent = 'Complete!';
+    
+    setTimeout(() => {
+        document.getElementById('loading-bar').style.display = 'none';
+        progressBar.style.width = '0%';
+    }, 500);
+}
+
+// Form submission with loading bar
+document.getElementById('prediction-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const submitBtn = document.getElementById('submit-btn');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Analyzing...';
+    submitBtn.disabled = true;
+    
+    // Show loading bar
+    const loadingInterval = showLoadingBar();
+    
+    try {
+        const response = await fetch('/predict', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update visualizer with new data
+            updateVisualizer(formData);
+            
+            // Show results
+            document.getElementById('classification-text').textContent = result.classification;
+            document.getElementById('confidence-text').textContent = result.confidence + '%';
+            document.getElementById('confidence-bar').style.width = result.confidence + '%';
+            
+            // Set progress bar color based on classification
+            const progressBar = document.getElementById('confidence-bar');
+            progressBar.className = 'progress-bar';
+            
+            if (result.classification === 'Confirmed Exoplanet') {
+                progressBar.classList.add('bg-success');
+            } else if (result.classification === 'Potential False Positive') {
+                progressBar.classList.add('bg-warning');
+            } else {
+                progressBar.classList.add('bg-danger');
+            }
+            
+            // Show description
+            document.getElementById('confidence-description').textContent = 
+                `The model is ${result.confidence}% confident in this classification.`;
+            
+            // Show results section
+            document.getElementById('results-section').style.display = 'block';
+            document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+            
+        } else {
+            showNotification('Error: ' + result.error, 'error');
+        }
+        
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    } finally {
+        // Hide loading bar and reset button
+        hideLoadingBar(loadingInterval);
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    }
+});
+
+// Exoplanet Visualizer
+let visualizer = null;
+
+function initializeVisualizer() {
+    const canvas = document.getElementById('planet-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    visualizer = {
+        canvas: canvas,
+        ctx: ctx,
+        centerX: canvas.width / 2,
+        centerY: canvas.height / 2,
+        starRadius: 30,
+        planetRadius: 8,
+        orbitRadius: 150,
+        angle: 0,
+        speed: 1,
+        isPlaying: true,
+        animationId: null,
+        
+        // System parameters
+        orbitalPeriod: 365,
+        planetSize: 1,
+        starTemp: 5778,
+        starSize: 1
+    };
+    
+    // Event listeners
+    document.getElementById('speed-control').addEventListener('input', function() {
+        visualizer.speed = parseFloat(this.value);
+    });
+    
+    document.getElementById('play-pause-btn').addEventListener('click', function() {
+        visualizer.isPlaying = !visualizer.isPlaying;
+        this.innerHTML = visualizer.isPlaying ? 
+            '<i class="fas fa-pause"></i> Pause' : 
+            '<i class="fas fa-play"></i> Play';
+    });
+    
+    document.getElementById('reset-btn').addEventListener('click', function() {
+        visualizer.angle = 0;
+    });
+    
+    document.getElementById('view-mode').addEventListener('change', function() {
+        // Update view mode (simplified for now)
+        console.log('View mode changed to:', this.value);
+    });
+    
+    startAnimation();
+}
+
+function startAnimation() {
+    function animate() {
+        if (visualizer.isPlaying) {
+            visualizer.angle += 0.02 * visualizer.speed;
+        }
+        
+        drawSystem();
+        visualizer.animationId = requestAnimationFrame(animate);
+    }
+    animate();
+}
+
+function drawSystem() {
+    const { ctx, centerX, centerY, starRadius, planetRadius, orbitRadius, angle } = visualizer;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, visualizer.canvas.width, visualizer.canvas.height);
+    
+    // Draw star
+    const starGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, starRadius);
+    starGradient.addColorStop(0, '#FFD700');
+    starGradient.addColorStop(0.7, '#FFA500');
+    starGradient.addColorStop(1, '#FF4500');
+    
+    ctx.fillStyle = starGradient;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, starRadius, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    // Draw star glow
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 20;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    
+    // Draw orbit path
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, orbitRadius, 0, 2 * Math.PI);
+    ctx.stroke();
+    
+    // Calculate planet position
+    const planetX = centerX + Math.cos(angle) * orbitRadius;
+    const planetY = centerY + Math.sin(angle) * orbitRadius;
+    
+    // Draw planet
+    const planetGradient = ctx.createRadialGradient(planetX - 3, planetY - 3, 0, planetX, planetY, planetRadius);
+    planetGradient.addColorStop(0, '#87CEEB');
+    planetGradient.addColorStop(0.7, '#4682B4');
+    planetGradient.addColorStop(1, '#191970');
+    
+    ctx.fillStyle = planetGradient;
+    ctx.beginPath();
+    ctx.arc(planetX, planetY, planetRadius, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    // Draw planet shadow on star during transit
+    if (Math.abs(planetX - centerX) < starRadius + planetRadius) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(planetX, centerY, planetRadius, 0, 2 * Math.PI);
+        ctx.fill();
+    }
+    
+    // Draw labels
+    ctx.fillStyle = 'white';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Star', centerX, centerY + starRadius + 20);
+    ctx.fillText('Exoplanet', planetX, planetY - planetRadius - 10);
+}
+
+function updateVisualizer(formData) {
+    if (!visualizer) return;
+    
+    // Update system parameters based on form data
+    const orbitalPeriod = parseFloat(formData.get('orbital_period')) || 365;
+    const planetRadius = parseFloat(formData.get('planet_radius')) || 1;
+    const stellarTemp = parseFloat(formData.get('stellar_temp')) || 5778;
+    const stellarRadius = parseFloat(formData.get('stellar_radius')) || 1;
+    
+    visualizer.orbitalPeriod = orbitalPeriod;
+    visualizer.planetRadius = Math.max(4, Math.min(20, planetRadius * 8)); // Scale for visualization
+    visualizer.starRadius = Math.max(20, Math.min(50, stellarRadius * 30)); // Scale for visualization
+    visualizer.orbitRadius = Math.max(100, Math.min(200, 150 + (orbitalPeriod - 365) / 10));
+    
+    // Update system info
+    document.getElementById('star-info').textContent = 
+        stellarTemp > 6000 ? 'Hot Star' : stellarTemp < 4000 ? 'Cool Star' : 'Sun-like';
+    document.getElementById('planet-info').textContent = 
+        planetRadius > 2 ? 'Large Planet' : planetRadius < 0.5 ? 'Small Planet' : 'Earth-like';
+    document.getElementById('orbit-info').textContent = 
+        Math.round(orbitalPeriod) + ' days';
+    
+    // Adjust animation speed based on orbital period
+    visualizer.speed = Math.max(0.1, Math.min(3, 365 / orbitalPeriod));
+    document.getElementById('speed-control').value = visualizer.speed;
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 100px; right: 20px; z-index: 9999; min-width: 300px;';
+    
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

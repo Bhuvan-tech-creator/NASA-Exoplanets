@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Classify - NASA Exoplanet Detection System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="text-center mb-4">Exoplanet Classification</h1>
+            <p class="text-center text-muted mb-5">
+                Enter the parameters from your exoplanet observation data to get an AI-powered classification
+            </p>
+        </div>
+    </div>
+    
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-calculator me-2"></i>Input Parameters</h4>
+                </div>
+                <div class="card-body">
+                    <form id="prediction-form" action="/predict" method="POST">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="orbital_period" class="form-label">
+                                    <i class="fas fa-clock me-1"></i>Orbital Period (days)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="The time it takes for a planet to complete one full orbit around its star. Earth's orbital period is 365.25 days."></i>
+                                </label>
+                                <input type="number" class="form-control" id="orbital_period" name="orbital_period" 
+                                       step="0.001" placeholder="e.g., 365.25" value="365.25" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="transit_duration" class="form-label">
+                                    <i class="fas fa-hourglass-half me-1"></i>Transit Duration (hours)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="How long the planet takes to cross in front of its star, blocking some of the star's light. Longer transits suggest larger planets or slower orbits."></i>
+                                </label>
+                                <input type="number" class="form-control" id="transit_duration" name="transit_duration" 
+                                       step="0.1" placeholder="e.g., 13.0" value="13.0" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="transit_depth" class="form-label">
+                                    <i class="fas fa-arrow-down me-1"></i>Transit Depth (ppm)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="How much the star's brightness decreases when the planet passes in front. Measured in parts per million (ppm). Larger planets cause deeper transits."></i>
+                                </label>
+                                <input type="number" class="form-control" id="transit_depth" name="transit_depth" 
+                                       step="0.1" placeholder="e.g., 1000" value="1000" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="planet_radius" class="form-label">
+                                    <i class="fas fa-circle me-1"></i>Planet Radius (Earth radii)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="The size of the planet compared to Earth. 1.0 = same size as Earth, 2.0 = twice Earth's radius. Gas giants can be 10+ times larger."></i>
+                                </label>
+                                <input type="number" class="form-control" id="planet_radius" name="planet_radius" 
+                                       step="0.01" placeholder="e.g., 1.0" value="1.0" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="equilibrium_temp" class="form-label">
+                                    <i class="fas fa-thermometer-half me-1"></i>Equilibrium Temperature (K)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="The theoretical temperature of the planet if it had no atmosphere. Earth's equilibrium temperature is about 255K (-18°C)."></i>
+                                </label>
+                                <input type="number" class="form-control" id="equilibrium_temp" name="equilibrium_temp" 
+                                       step="1" placeholder="e.g., 288" value="288" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="insolation_flux" class="form-label">
+                                    <i class="fas fa-sun me-1"></i>Insolation Flux (Earth flux)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="How much starlight the planet receives compared to Earth. 1.0 = same as Earth, 2.0 = twice as much light. Affects habitability."></i>
+                                </label>
+                                <input type="number" class="form-control" id="insolation_flux" name="insolation_flux" 
+                                       step="0.1" placeholder="e.g., 1.0" value="1.0" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="stellar_temp" class="form-label">
+                                    <i class="fas fa-star me-1"></i>Stellar Temperature (K)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="The surface temperature of the host star. Our Sun is 5,778K. Hotter stars are bluer, cooler stars are redder."></i>
+                                </label>
+                                <input type="number" class="form-control" id="stellar_temp" name="stellar_temp" 
+                                       step="1" placeholder="e.g., 5778" value="5778" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="stellar_logg" class="form-label">
+                                    <i class="fas fa-weight me-1"></i>Stellar Surface Gravity (log g)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="The strength of gravity at the star's surface. Higher values mean stronger gravity. Our Sun has log g ≈ 4.44."></i>
+                                </label>
+                                <input type="number" class="form-control" id="stellar_logg" name="stellar_logg" 
+                                       step="0.01" placeholder="e.g., 4.44" value="4.44" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="stellar_radius" class="form-label">
+                                    <i class="fas fa-expand-arrows-alt me-1"></i>Stellar Radius (Solar radii)
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="The size of the star compared to our Sun. 1.0 = same size as Sun, 2.0 = twice the Sun's radius. Red giants can be 100+ times larger."></i>
+                                </label>
+                                <input type="number" class="form-control" id="stellar_radius" name="stellar_radius" 
+                                       step="0.01" placeholder="e.g., 1.0" value="1.0" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="stellar_magnitude" class="form-label">
+                                    <i class="fas fa-eye me-1"></i>Stellar Magnitude
+                                    <i class="fas fa-info-circle info-tooltip" data-bs-toggle="tooltip" 
+                                       title="How bright the star appears from Earth. Lower numbers = brighter stars. Our Sun has magnitude -26.7, visible stars are 0-6."></i>
+                                </label>
+                                <input type="number" class="form-control" id="stellar_magnitude" name="stellar_magnitude" 
+                                       step="0.01" placeholder="e.g., 4.83" value="4.83" required>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submit-btn">
+                                <i class="fas fa-rocket me-2"></i>Classify Exoplanet
+                            </button>
+                        </div>
+                        
+                        <!-- Loading Bar -->
+                        <div id="loading-bar" class="mt-3" style="display: none;">
+                            <div class="progress" style="height: 25px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                                     role="progressbar" style="width: 0%" id="progress-bar">
+                                    <span id="loading-text">Analyzing...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Results Section -->
+    <div id="results-section" class="container mt-5" style="display: none; max-width: 800px;">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h4 class="mb-0"><i class="fas fa-star me-2"></i>Classification Results</h4>
+            </div>
+            <div class="card-body text-center py-4">
+                <div id="classification-result" class="mb-4">
+                    <h2 id="classification-text" class="text-primary mb-4 fw-bold" style="font-size: 2.5rem;"></h2>
+                    <div class="progress mb-4 mx-auto" style="height: 40px; max-width: 70%; border-radius: 20px;">
+                        <div id="confidence-bar" class="progress-bar" role="progressbar" style="width: 0%; font-size: 1.2rem;">
+                            <span id="confidence-text" class="fw-bold">0%</span>
+                        </div>
+                    </div>
+                    <p id="confidence-description" class="text-muted mt-3" style="font-size: 1.1rem;"></p>
+                </div>
+                
+                <div class="row g-4 mt-3 justify-content-center">
+                    <div class="col-md-4">
+                        <div id="confirmed-card" class="card h-100">
+                            <div class="card-body">
+                                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                                <h5>Confirmed Exoplanet</h5>
+                                <p class="text-muted mb-0">High confidence detection</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div id="potential-card" class="card h-100">
+                            <div class="card-body">
+                                <i class="fas fa-question-circle fa-3x text-warning mb-3"></i>
+                                <h5>Potential False Positive</h5>
+                                <p class="text-muted mb-0">Requires further analysis</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div id="not-exoplanet-card" class="card h-100">
+                            <div class="card-body">
+                                <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                                <h5>Not an Exoplanet</h5>
+                                <p class="text-muted mb-0">Low probability detection</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+<!-- Classification Results Modal -->
+<div class="modal fade" id="classificationModal" tabindex="-1" aria-labelledby="classificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" id="modal-header">
+                <h5 class="modal-title" id="classificationModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>Classification Results
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="mb-4">
+                    <h3 id="modal-classification-text" class="text-primary mb-3"></h3>
+                    <div class="progress mb-3" style="height: 40px;">
+                        <div id="modal-confidence-bar" class="progress-bar" role="progressbar" style="width: 0%">
+                            <span id="modal-confidence-text" class="fs-5 fw-bold">0%</span>
+                        </div>
+                    </div>
+                    <p id="modal-confidence-description" class="text-muted fs-5"></p>
+                </div>
+                
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="card border-success h-100">
+                            <div class="card-body">
+                                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                                <h6>Confirmed Exoplanet</h6>
+                                <small class="text-muted">High confidence detection</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-warning h-100">
+                            <div class="card-body">
+                                <i class="fas fa-question-circle fa-3x text-warning mb-3"></i>
+                                <h6>Potential False Positive</h6>
+                                <small class="text-muted">Requires further analysis</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-danger h-100">
+                            <div class="card-body">
+                                <i class="fas fa-times-circle fa-3x text-danger mb-3"></i>
+                                <h6>Not an Exoplanet</h6>
+                                <small class="text-muted">Low probability detection</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Note:</strong> This classification is based on our ensemble machine learning model trained on NASA Kepler and TESS data. 
+                    For scientific research, additional validation is recommended.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="window.location.reload()">
+                    <i class="fas fa-redo me-1"></i>Analyze Another
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

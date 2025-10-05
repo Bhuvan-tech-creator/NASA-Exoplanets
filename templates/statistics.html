@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block title %}Statistics - NASA Exoplanet Detection System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="text-center mb-5">Model Performance Statistics</h1>
+        </div>
+    </div>
+
+    {% if metrics %}
+    <!-- Overall Performance -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0"><i class="fas fa-trophy me-2"></i>Overall Performance</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="text-center">
+                                <div class="performance-circle mx-auto mb-3">
+                                    <canvas id="accuracyChart" width="200" height="200"></canvas>
+                                </div>
+                                <h4 class="text-success">{{ "%.1f"|format(metrics.ensemble_accuracy * 100) }}%</h4>
+                                <p class="text-muted">Ensemble Accuracy</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-center">
+                                <div class="performance-circle mx-auto mb-3">
+                                    <canvas id="aucChart" width="200" height="200"></canvas>
+                                </div>
+                                <h4 class="text-primary">{{ "%.1f"|format(metrics.ensemble_auc * 100) }}%</h4>
+                                <p class="text-muted">ROC AUC Score</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Individual Model Performance -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-success text-white">
+                    <h3 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Individual Model Performance</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-tree fa-3x text-success mb-3"></i>
+                                <h5>Random Forest</h5>
+                                <div class="mb-2">
+                                    <span class="badge bg-success">{{ "%.1f"|format(metrics.individual_results.rf.accuracy * 100) }}%</span>
+                                    <small class="text-muted d-block">Accuracy</small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-primary">{{ "%.1f"|format(metrics.individual_results.rf.auc * 100) }}%</span>
+                                    <small class="text-muted d-block">AUC</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-rocket fa-3x text-warning mb-3"></i>
+                                <h5>XGBoost</h5>
+                                <div class="mb-2">
+                                    <span class="badge bg-success">{{ "%.1f"|format(metrics.individual_results.xgb.accuracy * 100) }}%</span>
+                                    <small class="text-muted d-block">Accuracy</small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-primary">{{ "%.1f"|format(metrics.individual_results.xgb.auc * 100) }}%</span>
+                                    <small class="text-muted d-block">AUC</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-bolt fa-3x text-info mb-3"></i>
+                                <h5>LightGBM</h5>
+                                <div class="mb-2">
+                                    <span class="badge bg-success">{{ "%.1f"|format(metrics.individual_results.lgb.accuracy * 100) }}%</span>
+                                    <small class="text-muted d-block">Accuracy</small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-primary">{{ "%.1f"|format(metrics.individual_results.lgb.auc * 100) }}%</span>
+                                    <small class="text-muted d-block">AUC</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-brain fa-3x text-danger mb-3"></i>
+                                <h5>CNN</h5>
+                                <div class="mb-2">
+                                    <span class="badge bg-success">{{ "%.1f"|format(metrics.individual_results.cnn.accuracy * 100) }}%</span>
+                                    <small class="text-muted d-block">Accuracy</small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-primary">{{ "%.1f"|format(metrics.individual_results.cnn.auc * 100) }}%</span>
+                                    <small class="text-muted d-block">AUC</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Comparison Chart -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-info text-white">
+                    <h3 class="mb-0"><i class="fas fa-chart-line me-2"></i>Model Comparison</h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="comparisonChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Statistics -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-warning text-dark">
+                    <h3 class="mb-0"><i class="fas fa-database me-2"></i>Dataset Statistics</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-satellite fa-2x text-primary mb-2"></i>
+                                <h4>17,393</h4>
+                                <p class="text-muted">Total Observations</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-globe fa-2x text-success mb-2"></i>
+                                <h4>9,619</h4>
+                                <p class="text-muted">Kepler Data Points</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-star fa-2x text-warning mb-2"></i>
+                                <h4>7,774</h4>
+                                <p class="text-muted">TESS Data Points</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <i class="fas fa-cogs fa-2x text-info mb-2"></i>
+                                <h4>24</h4>
+                                <p class="text-muted">Features</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Retraining Section -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-dark text-white">
+                    <h3 class="mb-0"><i class="fas fa-sync-alt me-2"></i>Model Management</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h5>Retrain Model</h5>
+                            <p class="text-muted mb-0">Update the model with new data to improve performance</p>
+                        </div>
+                        <div class="col-md-4 text-md-end">
+                            <button id="retrainBtn" class="btn btn-primary">
+                                <i class="fas fa-sync-alt me-2"></i>Retrain Model
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-warning text-center">
+                <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                <h4>No Model Metrics Available</h4>
+                <p>The model needs to be trained first to display statistics.</p>
+                <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Home</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Accuracy Chart
+const accuracyCtx = document.getElementById('accuracyChart').getContext('2d');
+new Chart(accuracyCtx, {
+    type: 'doughnut',
+    data: {
+        datasets: [{
+            data: [{{ "%.1f"|format(metrics.ensemble_accuracy * 100) if metrics else 0 }}, {{ "%.1f"|format((1 - metrics.ensemble_accuracy) * 100) if metrics else 100 }}],
+            backgroundColor: ['#28a745', '#e9ecef'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '70%',
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// AUC Chart
+const aucCtx = document.getElementById('aucChart').getContext('2d');
+new Chart(aucCtx, {
+    type: 'doughnut',
+    data: {
+        datasets: [{
+            data: [{{ "%.1f"|format(metrics.ensemble_auc * 100) if metrics else 0 }}, {{ "%.1f"|format((1 - metrics.ensemble_auc) * 100) if metrics else 100 }}],
+            backgroundColor: ['#007bff', '#e9ecef'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '70%',
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Comparison Chart
+const comparisonCtx = document.getElementById('comparisonChart').getContext('2d');
+new Chart(comparisonCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Random Forest', 'XGBoost', 'LightGBM', 'CNN', 'Ensemble'],
+        datasets: [{
+            label: 'Accuracy (%)',
+            data: [
+                {{ "%.1f"|format(metrics.individual_results.rf.accuracy * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.individual_results.xgb.accuracy * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.individual_results.lgb.accuracy * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.individual_results.cnn.accuracy * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.ensemble_accuracy * 100) if metrics else 0 }}
+            ],
+            backgroundColor: ['#28a745', '#ffc107', '#17a2b8', '#dc3545', '#6f42c1'],
+            borderColor: ['#28a745', '#ffc107', '#17a2b8', '#dc3545', '#6f42c1'],
+            borderWidth: 1
+        }, {
+            label: 'AUC (%)',
+            data: [
+                {{ "%.1f"|format(metrics.individual_results.rf.auc * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.individual_results.xgb.auc * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.individual_results.lgb.auc * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.individual_results.cnn.auc * 100) if metrics else 0 }},
+                {{ "%.1f"|format(metrics.ensemble_auc * 100) if metrics else 0 }}
+            ],
+            backgroundColor: ['#28a745', '#ffc107', '#17a2b8', '#dc3545', '#6f42c1'],
+            borderColor: ['#28a745', '#ffc107', '#17a2b8', '#dc3545', '#6f42c1'],
+            borderWidth: 1,
+            type: 'line',
+            fill: false,
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'top'
+            }
+        }
+    }
+});
+
+// Retrain button functionality
+document.getElementById('retrainBtn').addEventListener('click', async function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Retraining...';
+    btn.disabled = true;
+    
+    // Show loading notification
+    showNotification('Starting model retraining... This may take several minutes.', 'info');
+    
+    try {
+        const response = await fetch('/api/retrain', {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Model retrained successfully! Reloading page...', 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showNotification('Error: ' + result.error, 'error');
+        }
+        
+    } catch (error) {
+        showNotification('Error: ' + error.message, 'error');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 100px; right: 20px; z-index: 9999; min-width: 300px;';
+    
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

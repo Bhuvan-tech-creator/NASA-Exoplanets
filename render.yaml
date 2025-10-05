@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: nasa-exoplanet-hunt
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers=2 --threads=4 --timeout=120 --preload
+    disk:
+      name: exoplanet-data
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: '1'
+      - key: PORT
+        value: '5000'
+      - key: SKIP_TRAINING
+        value: '1'
+      - key: DATA_DIR
+        value: /var/data
+      - key: MODELS_DIR
+        value: /var/data/models
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: ADMIN_TOKEN
+        generateValue: true
