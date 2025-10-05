@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 
 import numpy as np
 import pandas as pd
@@ -14,9 +15,44 @@ import plotly.express as px
 from data_preprocessing import ExoplanetDataProcessor
 from ensemble_model import ExoplanetEnsembleModel
 
-# Basic console logging so terminal reflects user interactions
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
-logger = logging.getLogger(__name__)
+# Logging: console + rotating file, and a simple in-app buffer
+LOG_PATH = os.path.join(os.path.dirname(__file__), MODELS_DIR if 'MODELS_DIR' in globals() else 'models', 'streamlit_app.log')
+os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+
+def _get_logger():
+    logger = logging.getLogger('exoplanet_ui')
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        fmt = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s', datefmt='%H:%M:%S')
+        # Console
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        ch.setFormatter(fmt)
+        logger.addHandler(ch)
+        # File (rotate ~1MB x 3)
+        try:
+            fh = RotatingFileHandler(LOG_PATH, maxBytes=1_000_000, backupCount=3)
+            fh.setLevel(logging.INFO)
+            fh.setFormatter(fmt)
+            logger.addHandler(fh)
+        except Exception:
+            # If filesystem is read-only (some hosts), we still have console
+            pass
+    return logger
+
+logger = _get_logger()
+
+def ui_log(message: str):
+    try:
+        if 'ui_logs' not in st.session_state:
+            st.session_state['ui_logs'] = []
+        # Keep a bounded buffer
+        st.session_state['ui_logs'].append(message)
+        if len(st.session_state['ui_logs']) > 300:
+            st.session_state['ui_logs'] = st.session_state['ui_logs'][-300:]
+    except Exception:
+        pass
+    logger.info(message)
 
 
 # Environment-driven paths (compatible with Streamlit Cloud)
@@ -76,6 +112,7 @@ def _card_html(title: str, body_html: str, status: str | None = None) -> str:
 @st.cache_resource(show_spinner=False)
 def load_models_and_scaler():
     """Load ensemble models and scaler from disk; return (ensemble_model, processor, metrics)."""
+    logger.info("Loading models and scaler...")
     os.makedirs(MODELS_DIR, exist_ok=True)
     # Model
     ensemble = ExoplanetEnsembleModel()
@@ -83,9 +120,11 @@ def load_models_and_scaler():
     try:
         prefix = os.path.join(MODELS_DIR, 'exoplanet_ensemble')
         ensemble.load_models(filepath_prefix=prefix)
+        logger.info("Models loaded from %s", prefix)
     except Exception as e:
         # Not fatal for UI; we can train later if allowed
         st.warning(f"Models not found or failed to load: {e}")
+        logger.warning("Models not found or failed to load: %s", e)
 
     # Processor and scaler
     processor = ExoplanetDataProcessor(data_dir=DATA_DIR)
@@ -93,8 +132,10 @@ def load_models_and_scaler():
     if os.path.exists(scaler_path):
         try:
             processor.scaler = joblib.load(scaler_path)
+            logger.info("Scaler loaded from %s", scaler_path)
         except Exception as e:
             st.warning(f"Failed to load scaler: {e}")
+            logger.warning("Failed to load scaler: %s", e)
 
     # Metrics
     metrics_path = os.path.join(MODELS_DIR, 'model_metrics.json')
@@ -102,6 +143,7 @@ def load_models_and_scaler():
         try:
             with open(metrics_path, 'r') as f:
                 metrics = json.load(f)
+                logger.info("Metrics loaded from %s", metrics_path)
         except Exception:
             pass
 
@@ -110,33 +152,46 @@ def load_models_and_scaler():
 
 def train_and_save(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProcessor):
     """Run optimized training (faster for Streamlit), then persist models/metrics/scaler."""
-    
+    logger.info("Training started")
+    ui_log("Initializing training pipeline...")
     # Check if quick training mode is enabled
     quick_mode = os.environ.get('QUICK_TRAIN', '0') == '1'
+    logger.info("Quick training mode: %s", quick_mode)
     
     with st.spinner("Preparing data (this may take a few minutes)..."):
         data = processor.prepare_data_for_training()
+        try:
+            X_shape = getattr(data.get('X_train'), 'shape', None)
+            ui_log(f"Data prepared. X_train shape: {X_shape}")
+        except Exception:
+            pass
 
     if quick_mode:
         with st.spinner("Training ensemble (optimized for speed)..."):
             # Faster training with reduced parameters
+            ui_log("Training with quick mode parameters...")
             results = ensemble.train_ensemble_quick(data)
     else:
         with st.spinner("Training ensemble (full training - this may take several minutes)..."):
+            ui_log("Training with full parameters...")
             results = ensemble.train_ensemble(data)
 
     # Save models, metrics, scaler
     os.makedirs(MODELS_DIR, exist_ok=True)
     prefix = os.path.join(MODELS_DIR, 'exoplanet_ensemble')
     ensemble.save_models(filepath_prefix=prefix)
+    ui_log(f"Models saved to prefix: {prefix}")
     try:
         joblib.dump(processor.scaler, os.path.join(MODELS_DIR, 'exoplanet_ensemble_scaler.pkl'))
+        ui_log("Scaler persisted")
     except Exception:
         pass
     with open(os.path.join(MODELS_DIR, 'model_metrics.json'), 'w') as f:
         json.dump(results, f, indent=2)
+    ui_log("Metrics saved")
 
     st.success("Training complete and models saved.")
+    logger.info("Training completed")
     return results
 
 
@@ -475,6 +530,7 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
 
     if submitted:
         logger.info("Classify form submitted")
+        ui_log("Classify submitted: running prediction...")
         try:
             with st.spinner("🔄 Running ensemble model prediction..."):
                 # Construct feature array in the correct format based on training data
@@ -516,6 +572,7 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
                 # Get ensemble prediction
                 prediction_proba = ensemble.predict(features_scaled, light_curve.reshape(1, -1))[0]
                 logger.info("Prediction complete with confidence=%.4f", float(prediction_proba))
+                ui_log(f"Prediction confidence: {float(prediction_proba):.4f}")
                 
                 # Convert to percentage
                 confidence_pct = prediction_proba * 100
@@ -669,6 +726,7 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
 
         except Exception as e:
             logger.exception("Prediction failed: %s", e)
+            ui_log(f"Prediction failed: {e}")
             st.error(f"❌ Prediction failed: {str(e)}")
             st.info("💡 Please ensure the models are properly trained and try again.")
             if st.checkbox("Show error details"):
@@ -871,6 +929,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
     with action_col1:
         if st.button("💾 Save Parameters", type="secondary", use_container_width=True):
             logger.info("Hyperparameters: Save clicked")
+            ui_log("Hyperparameters saved")
             # Update session state
             st.session_state.hyperparameters = {
                 'rf': {
@@ -909,6 +968,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
     with action_col2:
         if st.button("🔄 Reset to Defaults", type="secondary", use_container_width=True):
             logger.info("Hyperparameters: Reset to defaults clicked")
+            ui_log("Hyperparameters reset to defaults")
             st.session_state.hyperparameters = {
                 'rf': {'n_estimators': 200, 'max_depth': 20, 'min_samples_split': 5, 'min_samples_leaf': 2},
                 'xgb': {'n_estimators': 300, 'max_depth': 8, 'learning_rate': 0.1, 'subsample': 0.8},
@@ -922,8 +982,10 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
     with action_col3:
         if st.button("🚀 Retrain with New Parameters", type="primary", use_container_width=True):
             logger.info("Hyperparameters: Retrain clicked")
+            ui_log("Retrain requested from Hyperparameters page")
             if not ALLOW_TRAINING:
                 st.warning("⚠️ Training is disabled on this deployment. Set ALLOW_TRAINING=1 to enable.")
+                ui_log("Training blocked: ALLOW_TRAINING is 0")
                 return
                 
             if abs(total_weight - 1.0) > 0.01:
@@ -981,12 +1043,14 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     # Create new ensemble with custom hyperparameters
                     new_ensemble = ExoplanetEnsembleModel()
                     new_processor = ExoplanetDataProcessor(data_dir=DATA_DIR)
+                    ui_log("New ensemble and processor created")
                     
                     progress_bar.progress(30)
                     status_text.text('📊 Preparing training data...')
                     
                     # Prepare data (use quick training for faster results)
                     data = new_processor.prepare_data_for_training()
+                    ui_log("Training data prepared (custom retrain)")
                     
                     progress_bar.progress(50)
                     status_text.text('🚀 Training models with optimized parameters...')
@@ -995,8 +1059,13 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     import os
                     os.environ['QUICK_TRAIN'] = '1'  # Signal for reduced training time
                     
-                    results = new_ensemble.train_ensemble(data)
+                    # Prefer quick training path if available
+                    try:
+                        results = new_ensemble.train_ensemble_quick(data)
+                    except Exception:
+                        results = new_ensemble.train_ensemble(data)
                     logger.info("Hyperparameters: Base training run finished")
+                    ui_log("Models trained (custom retrain)")
                     
                     progress_bar.progress(80)
                     status_text.text('💾 Saving trained models...')
@@ -1005,18 +1074,23 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     os.makedirs(MODELS_DIR, exist_ok=True)
                     prefix = os.path.join(MODELS_DIR, 'exoplanet_ensemble')
                     new_ensemble.save_models(filepath_prefix=prefix)
+                    ui_log(f"Custom retrain models saved to prefix: {prefix}")
                     
                     # Save scaler and metrics
                     joblib.dump(new_processor.scaler, os.path.join(MODELS_DIR, 'exoplanet_ensemble_scaler.pkl'))
+                    ui_log("Custom retrain scaler saved")
                     with open(os.path.join(MODELS_DIR, 'model_metrics.json'), 'w') as f:
                         json.dump(results, f, indent=2)
+                    ui_log("Custom retrain metrics saved")
                     
                     progress_bar.progress(100)
                     status_text.text('✅ Training completed!')
                     
                     # Actually retrain the models
                     # Note: This would need modification to ensemble_model.py to accept custom hyperparameters
-                    results = train_and_save(ensemble, processor)
+                    # Refresh in-memory models for current session
+                    st.session_state['metrics'] = results
+                    ui_log("Retraining complete with new parameters")
                     st.session_state['metrics'] = results
                     
                     progress_bar.empty()
@@ -1025,6 +1099,7 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
                     
                 except Exception as e:
                     logger.exception("Error during retraining: %s", e)
+                    ui_log(f"Error during retraining: {e}")
                     st.error(f"❌ Error retraining models: {e}")
     
     # Current Parameters Display
@@ -1629,8 +1704,10 @@ def page_statistics(metrics):
     with train_col2:
         if st.button("🚀 Retrain Models", type="primary", use_container_width=True):
             logger.info("Statistics: Retrain Models clicked")
+            ui_log("Retrain requested from Statistics page")
             if not ALLOW_TRAINING:
                 st.warning("⚠️ Training is disabled on this deployment. Set ALLOW_TRAINING=1 to enable.")
+                ui_log("Training blocked: ALLOW_TRAINING is 0")
                 return
                 
             with st.spinner("Retraining models... This may take several minutes."):
@@ -1644,6 +1721,7 @@ def page_statistics(metrics):
                     
                     # Load ensemble and processor
                     ensemble, processor, _ = load_models_and_scaler()
+                    ui_log("Loaded ensemble and processor for retrain")
                     
                     progress_bar.progress(20)
                     status_text.text('📊 Preparing training data...')
@@ -1667,6 +1745,7 @@ def page_statistics(metrics):
                     # Actually retrain the models
                     results = train_and_save(ensemble, processor)
                     logger.info("Statistics: Training completed and saved")
+                    ui_log("Statistics retrain completed")
                     
                     progress_bar.progress(100)
                     st.session_state['metrics'] = results
@@ -1678,6 +1757,7 @@ def page_statistics(metrics):
                     
                 except Exception as e:
                     logger.exception("Error retraining from Statistics page: %s", e)
+                    ui_log(f"Error retraining from Statistics: {e}")
                     st.error(f"❌ Error retraining models: {e}")
     
     # Recent Training Information
@@ -1735,6 +1815,36 @@ def main():
         st.markdown("### ⚙️ System Info")
         st.text(f"Training: {'Enabled' if ALLOW_TRAINING else 'Disabled'}")
         st.text(f"Models: {'Loaded' if 'metrics' in st.session_state and st.session_state['metrics'] else 'Not Found'}")
+
+        # Logs panel
+        st.markdown("---")
+        st.markdown("### 🧾 Logs")
+        if st.button("Refresh Logs", use_container_width=True):
+            pass  # A no-op to trigger rerun and refresh display below
+        if st.button("Reload Models", use_container_width=True):
+            try:
+                load_models_and_scaler.clear()
+            except Exception:
+                pass
+            _e, _p, _m = load_models_and_scaler()
+            st.session_state['metrics'] = _m
+            ui_log("Models reloaded via sidebar button")
+            st.success("Models reloaded")
+        logs = []
+        # Prefer file logs if available
+        try:
+            if os.path.exists(LOG_PATH):
+                with open(LOG_PATH, 'r', encoding='utf-8', errors='ignore') as lf:
+                    logs = lf.readlines()[-200:]
+        except Exception:
+            logs = []
+        # Merge with in-memory buffer
+        if 'ui_logs' in st.session_state:
+            logs += [f"[UI] {m}\n" for m in st.session_state['ui_logs'][-100:]]
+        if logs:
+            st.code(''.join(logs) or '(no logs)', language='')
+        else:
+            st.info("No logs yet. Interact with the app or start a retrain.")
 
     ensemble, processor, metrics = load_models_and_scaler()
     # Keep latest metrics in session
