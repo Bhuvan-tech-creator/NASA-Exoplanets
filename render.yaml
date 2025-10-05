@@ -18,7 +18,7 @@ services:
       - key: SKIP_TRAINING
         value: '1'
       - key: DATA_DIR
-        value: /var/data
+        value: /opt/render/project/src
       - key: MODELS_DIR
         value: /var/data/models
       - key: UPLOADS_DIR
