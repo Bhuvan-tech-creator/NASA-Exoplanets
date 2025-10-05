@@ -12,13 +12,57 @@ from ensemble_model import ExoplanetEnsembleModel
 
 
 # Environment-driven paths (compatible with Streamlit Cloud)
-DATA_DIR = os.environ.get('DATA_DIR', '.')
-MODELS_DIR = os.environ.get('MODELS_DIR', 'models')
-UPLOADS_DIR = os.environ.get('UPLOADS_DIR', 'uploads')
-ALLOW_TRAINING = os.environ.get('ALLOW_TRAINING', '0') == '1'
+# Support both environment variables and Streamlit secrets
+def _get_setting(name: str, default: str | None = None) -> str | None:
+    val = os.environ.get(name)
+    if val is None:
+        try:
+            if name in st.secrets:
+                val = st.secrets.get(name)
+        except Exception:
+            val = None
+    return val if val is not None else default
+
+DATA_DIR = _get_setting('DATA_DIR', '.')
+MODELS_DIR = _get_setting('MODELS_DIR', 'models')
+UPLOADS_DIR = _get_setting('UPLOADS_DIR', 'uploads')
+ALLOW_TRAINING = (_get_setting('ALLOW_TRAINING', '0') == '1')
 
 
 st.set_page_config(page_title="NASA Exoplanet Hunt", layout="wide")
+
+
+def _inject_css():
+    css_paths = [
+        os.path.join('static', 'css', 'style.css'),
+        os.path.join(os.path.dirname(__file__), 'static', 'css', 'style.css'),
+    ]
+    for p in css_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, 'r', encoding='utf-8') as f:
+                    st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+                break
+            except Exception:
+                pass
+
+
+def _card_html(title: str, body_html: str, status: str | None = None) -> str:
+    status_class = ''
+    if status == 'success':
+        status_class = 'selected-card selected-success'
+    elif status == 'warning':
+        status_class = 'selected-card selected-warning'
+    elif status == 'danger':
+        status_class = 'selected-card selected-danger'
+    return f'''
+    <div class="container">
+      <div class="card {status_class}" style="margin:16px 0;">
+        <div class="card-header"><h5 class="card-title" style="margin:0;">{title}</h5></div>
+        <div class="card-body">{body_html}</div>
+      </div>
+    </div>
+    '''
 
 
 @st.cache_resource(show_spinner=False)
@@ -80,8 +124,17 @@ def train_and_save(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataPro
 
 
 def page_home(metrics):
-    st.title("NASA Exoplanet Hunt")
-    st.markdown("Explore, classify, and understand exoplanets with an ensemble model.")
+    st.markdown(
+        """
+        <section class="hero-section">
+            <div class="container">
+                <h1>NASA Exoplanet Hunt</h1>
+                <p class="lead">Explore, classify, and understand exoplanets with an ensemble model.</p>
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
 
     cols = st.columns(2)
     with cols[0]:
@@ -160,7 +213,14 @@ def page_classify(ensemble: ExoplanetEnsembleModel, processor: ExoplanetDataProc
                 classification = "Not an Exoplanet"
                 confidence_pct = float((1 - confidence) * 100)
 
-            st.success(f"{classification} (confidence {confidence_pct:.2f}%)")
+            # Styled result card similar to Flask UI
+            status = 'success' if 'Confirmed' in classification else ('warning' if 'Potential' in classification else 'danger')
+            body_html = f"""
+                <p class='card-text'><strong>Prediction:</strong> {classification}</p>
+                <p class='card-text'><strong>Confidence:</strong> {confidence_pct:.2f}%</p>
+            """
+            st.markdown(_card_html("Classification Result", body_html, status=status), unsafe_allow_html=True)
+
             with st.expander("Light curve"):
                 st.line_chart(light_curve)
         except Exception as e:
@@ -190,6 +250,38 @@ def page_hyperparameters(ensemble: ExoplanetEnsembleModel, processor: ExoplanetD
             st.error(f"Training failed: {e}")
 
 
+def page_visualizer():
+    import plotly.graph_objects as go
+    st.header("Orbital Visualizer")
+    st.caption("A lightweight orbit sketch to mirror the visualizer page.")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        a = st.number_input("Semi-major axis (AU)", 0.05, 10.0, 1.0, 0.01)
+    with c2:
+        e = st.number_input("Eccentricity", 0.0, 0.95, 0.0, 0.01)
+    with c3:
+        n_pts = st.slider("Points", 100, 1000, 300, 50)
+
+    # Parametric ellipse (simplified)
+    theta = np.linspace(0, 2*np.pi, int(n_pts))
+    b = a * np.sqrt(1 - e**2)
+    x = a * np.cos(theta) - a*e  # focus at origin
+    y = b * np.sin(theta)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[0], y=[0], mode='markers', marker=dict(size=12, color='#a7d3ff'), name='Star'))
+    fig.add_trace(go.Scatter(x=x, y=y, mode='lines', line=dict(color='#5a8bd4'), name='Orbit'))
+    fig.update_layout(
+        template='plotly_dark',
+        xaxis=dict(scaleanchor='y', scaleratio=1, visible=False),
+        yaxis=dict(visible=False),
+        showlegend=False, margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor='#0b1220', plot_bgcolor='#0b1220'
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def page_statistics(metrics):
     st.header("Statistics")
     if not metrics:
@@ -208,9 +300,10 @@ def page_statistics(metrics):
 
 
 def main():
+    _inject_css()
     with st.sidebar:
         st.title("Exoplanet Hunt")
-        page = st.radio("Navigate", ["Home", "Classify", "Hyperparameters", "Statistics"], index=0)
+        page = st.radio("Navigate", ["Home", "Classify", "Visualizer", "Hyperparameters", "Statistics"], index=0)
 
     ensemble, processor, metrics = load_models_and_scaler()
     # Keep latest metrics in session
@@ -221,6 +314,8 @@ def main():
         page_home(st.session_state.get('metrics'))
     elif page == "Classify":
         page_classify(ensemble, processor)
+    elif page == "Visualizer":
+        page_visualizer()
     elif page == "Hyperparameters":
         page_hyperparameters(ensemble, processor)
     elif page == "Statistics":
