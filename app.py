@@ -26,6 +26,7 @@ STATUS_PATH = os.path.join(MODELS_DIR, 'training_status.json')
 ensemble_model = None
 data_processor = None
 model_metrics = None
+_INIT_DONE = False
 
 def _write_status(status: dict):
     try:
@@ -114,6 +115,22 @@ def load_or_train_model():
                 print(f"Warning: failed to persist scaler: {e}")
             
             print("New models trained and saved")
+
+
+def ensure_initialized():
+    """Make sure data_processor and ensemble_model are ready for use."""
+    global data_processor, ensemble_model, _INIT_DONE
+    if data_processor is None:
+        data_processor = ExoplanetDataProcessor(data_dir=DATA_DIR)
+    if ensemble_model is None:
+        ensemble_model = ExoplanetEnsembleModel()
+        # Try load models if present
+        try:
+            prefix = os.path.join(MODELS_DIR, 'exoplanet_ensemble')
+            ensemble_model.load_models(filepath_prefix=prefix)
+        except Exception:
+            pass
+    _INIT_DONE = True
 
 @app.route('/')
 def index():
@@ -295,6 +312,8 @@ def hyperparameters():
     """Hyperparameter tuning interface"""
     if request.method == 'POST':
         try:
+            # Ensure app components are ready
+            ensure_initialized()
             # Get hyperparameters from form
             rf_n_estimators = int(request.form.get('rf_n_estimators', 200))
             rf_max_depth = int(request.form.get('rf_max_depth', 20))
@@ -337,6 +356,8 @@ def api_retrain():
 
     try:
         global ensemble_model, model_metrics
+        # Ensure components are ready
+        ensure_initialized()
 
         if not data_processor:
             return jsonify({'success': False, 'error': 'Data processor not initialized'})
@@ -414,6 +435,27 @@ def api_train_start():
 @app.route('/api/train/status', methods=['GET'])
 def api_train_status():
     return jsonify(_read_status({}) or {'status': 'idle'})
+
+
+@app.before_request
+def _init_once_before_request():
+    """Ensure initialization happens once for Flask 3 (no before_first_request)."""
+    global _INIT_DONE
+    if _INIT_DONE:
+        return
+    try:
+        ensure_initialized()
+        # If not trained, auto-start background training so Render begins immediately
+        if not ensemble_model or not getattr(ensemble_model, 'is_trained', False):
+            print('Auto-starting background training on first request...')
+            _write_status({'status': 'queued', 'message': 'Auto-starting training on first request.', 'queued_at': datetime.utcnow().isoformat() + 'Z'})
+            from threading import Thread
+            t = Thread(target=_train_in_background, daemon=True)
+            t.start()
+    except Exception as e:
+        print(f"Initialization on first request failed: {e}")
+    finally:
+        _INIT_DONE = True
 
 if __name__ == '__main__':
     # Initialize model
