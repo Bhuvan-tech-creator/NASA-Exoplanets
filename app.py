@@ -425,6 +425,17 @@ if __name__ == '__main__':
     os.makedirs('templates', exist_ok=True)
     os.makedirs('static/css', exist_ok=True)
     os.makedirs('static/js', exist_ok=True)
+
+    # If models are not trained/available, start background training immediately
+    try:
+        if not ensemble_model or not getattr(ensemble_model, 'is_trained', False):
+            print('No trained models available at startup. Launching background training...')
+            _write_status({'status': 'queued', 'message': 'Auto-starting training on boot.', 'queued_at': datetime.utcnow().isoformat() + 'Z'})
+            from threading import Thread
+            t = Thread(target=_train_in_background, daemon=True)
+            t.start()
+    except Exception as e:
+        print(f"Failed to auto-start background training: {e}")
     
     # Honor hosting environment variables
     port = int(os.environ.get('PORT', 5000))
