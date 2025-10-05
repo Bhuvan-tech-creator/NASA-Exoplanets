@@ -1,0 +1,4 @@
+[10:54:17] [INFO] Loading models and scaler...
+[10:54:18] [INFO] Models loaded from models\exoplanet_ensemble
+[10:54:18] [INFO] Scaler loaded from models\exoplanet_ensemble_scaler.pkl
+[10:54:18] [INFO] Metrics loaded from models\model_metrics.json
